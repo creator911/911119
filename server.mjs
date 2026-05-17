@@ -1,6 +1,6 @@
 import http from "node:http";
 import { readFile, writeFile, mkdir, stat, copyFile } from "node:fs/promises";
-import { createReadStream, existsSync } from "node:fs";
+import { createReadStream, existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 import crypto from "node:crypto";
 import { fileURLToPath } from "node:url";
@@ -15,6 +15,7 @@ const CHARGE_HOLDER = process.env.ITEMZONE_CHARGE_HOLDER || "예금주를 입력
 const CHARGE_NUMBER = process.env.ITEMZONE_CHARGE_NUMBER || "계좌번호를 입력하세요";
 const DATA_DIR = path.join(__dirname, "data");
 const DB_PATH = path.join(DATA_DIR, "db.json");
+const PUBLIC_SEED_PATH = path.join(DATA_DIR, "public-seed.json");
 const PUBLIC_DIR = path.join(__dirname, "public");
 
 const DISPLAY_GRADES = ["브론즈", "실버", "골드", "플레티넘", "다이아", "마스터", "챌린저"];
@@ -54,6 +55,40 @@ function initialGroupFor(name = "") {
   return /^[0-9a-z]/i.test(String.fromCodePoint(first)) ? "1~A" : "1~A";
 }
 
+function readPublicSeed() {
+  try {
+    return JSON.parse(readFileSync(PUBLIC_SEED_PATH, "utf8"));
+  } catch {
+    return { site: {}, games: [] };
+  }
+}
+
+function publicSeedGames(seed) {
+  return (seed.games || []).map((game, index) => ({
+    ...game,
+    id: game.id || id("game"),
+    rank: Number(game.rank || index + 1),
+    trades: Number(game.trades || 0),
+    visible: game.visible !== false,
+    slug: game.slug || slugifyGame(game.name, index),
+    initialGroup: game.initialGroup || initialGroupFor(game.name)
+  }));
+}
+
+function publicSeedPosts(seed, ownerId) {
+  return (seed.site?.posts || []).map((post) => ({
+    ...post,
+    id: post.id || id("post"),
+    displayName: post.displayName || "관리자",
+    authorId: ownerId,
+    pinned: Boolean(post.pinned),
+    fontFamily: post.fontFamily || "default",
+    fontSize: String(post.fontSize || "16"),
+    fontWeight: String(post.fontWeight || "400"),
+    createdAt: post.createdAt || now()
+  }));
+}
+
 async function hashPassword(password, salt = crypto.randomBytes(16).toString("hex")) {
   const derived = await new Promise((resolve, reject) => {
     crypto.scrypt(password, salt, 64, (err, key) => (err ? reject(err) : resolve(key)));
@@ -80,10 +115,24 @@ async function readDb() {
 
 function normalizeDb(db) {
   let changed = false;
+  const seed = readPublicSeed();
+  const seededGames = publicSeedGames(seed);
   db.site ||= {};
   db.site.banners ||= [{ title: "메인 배너", subtitle: "", badge: "" }];
   db.site.posts ||= [];
   db.site.notices ||= [];
+  if (seededGames.length && (!db.games?.length || db.games.length < seededGames.length)) {
+    db.games = seededGames;
+    changed = true;
+  }
+  if (seed.site?.banners?.length && !db.site.banners?.[0]?.imageUrl) {
+    db.site.banners = seed.site.banners;
+    changed = true;
+  }
+  if (seed.site?.events?.length && (!db.site.events?.length || db.site.events.length < seed.site.events.length)) {
+    db.site.events = seed.site.events;
+    changed = true;
+  }
   db.games = (db.games || []).map((game, index) => {
     const next = { ...game };
     if (!next.slug) {
@@ -176,6 +225,9 @@ async function writeDb(db) {
 async function seedDb() {
   await mkdir(DATA_DIR, { recursive: true });
   const ownerId = id("user");
+  const seed = readPublicSeed();
+  const seededPosts = publicSeedPosts(seed, ownerId);
+  const seededGames = publicSeedGames(seed);
   const db = {
     users: [
       {
@@ -196,21 +248,21 @@ async function seedDb() {
     ],
     site: {
       chargeAccount: { bank: CHARGE_BANK, holder: CHARGE_HOLDER, number: CHARGE_NUMBER },
-      banners: [
+      banners: seed.site?.banners?.length ? seed.site.banners : [
         { title: "메이플스토리 월드", subtitle: "아이템존에서 안전하게 거래하세요", badge: "오픈 기념 혜택" }
       ],
       notices: ["이용약관 및 마일리지 정책 변경 안내", "신규가입 쿠폰 지급 이벤트", "시스템 점검 안내"],
-      events: [
+      events: seed.site?.events?.length ? seed.site.events : [
         { title: "신규가입 이벤트", text: "가입하고 첫 거래 쿠폰 받기" },
         { title: "피해보상 제도", text: "거래 사고시 보상 접수 지원" },
         { title: "친구초대", text: "초대링크 공유하고 마일리지 받기" },
         { title: "등급 혜택", text: "등급별 수수료와 쿠폰 혜택" }
       ],
-      posts: [
+      posts: seededPosts.length ? seededPosts : [
         { id: id("post"), title: "아이템존 오픈 안내", body: "안전거래 중심의 게임 거래소 아이템존입니다.", displayName: "아이템존", authorId: ownerId, createdAt: now() }
       ]
     },
-    games: [
+    games: seededGames.length ? seededGames : [
       ["메이플스토리월드", "🧙", 2591], ["아이온2", "🛡️", 2204], ["리니지2", "⚔️", 3880], ["로스트아크", "🔥", 1785],
       ["던전앤파이터", "💎", 1511], ["피파온라인4", "⚽", 1408], ["서든어택", "🎯", 1335], ["발로란트", "🎮", 1204],
       ["R2", "🗡️", 1155], ["로한", "🌙", 1002]
