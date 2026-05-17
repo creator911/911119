@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 180 280">
+  <rect width="180" height="280" rx="18" fill="#0f172a"/>
+  <path d="M20 72c54-46 86-46 140 0v96c-54 42-86 42-140 0z" fill="#38bdf8" opacity=".55"/>
+  <circle cx="70" cy="120" r="12" fill="#fff"/>
+  <circle cx="110" cy="120" r="12" fill="#fff"/>
+  <text x="90" y="248" text-anchor="middle" font-size="18" font-weight="900" fill="#fff">VALORANT</text>
+</svg>

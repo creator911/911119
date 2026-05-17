@@ -1,0 +1,12 @@
+{
+  "name": "itemzone-mvp",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "node server.mjs",
+    "start": "node server.mjs",
+    "build": "node server.mjs --check"
+  },
+  "description": "아이템존 운영 MVP prototype with member/admin/staff flows."
+}
