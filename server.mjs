@@ -435,7 +435,8 @@ function gradeAsset(grade = "브론즈") {
     마스터: "master",
     챌린저: "challenger"
   };
-  return `/assets/tiers/${assets[grade] || "bronze"}.png`;
+  const file = `/assets/tiers/${assets[grade] || "bronze"}.png`;
+  return existsSync(path.join(PUBLIC_DIR, file.replace(/^\/+/, ""))) ? file : "/assets/tiers/bronze.png";
 }
 
 function protect(user, role) {
@@ -741,7 +742,6 @@ function legacyTradeComposePage(user, type, db, selectedSlug = "") {
   const sell = type === "sell";
   const games = (db.games || []).filter((game) => game.visible !== false);
   const selectedGame = games.find((game) => game.slug === selectedSlug) || games[0] || {};
-  const gameOptions = games.map((game) => `<option value="${esc(game.slug)}" ${game.slug === selectedGame.slug ? "selected" : ""}>${esc(game.name)}</option>`).join("");
   const servers = gameServerList(selectedGame);
   const tradeKinds = gameTradeKinds(selectedGame);
   const sellUnits = gameFilterList(selectedGame).find((filter) => filter.label === "판매 단위")?.values || ["일반", "분할"];
@@ -756,7 +756,18 @@ function legacyTradeComposePage(user, type, db, selectedSlug = "") {
       <section class="trade-compose__body">
         <div class="compose-field full">
           <b>게임</b>
-          <select name="gameSlug" required>${gameOptions}</select>
+          <div class="trade-game-picker" data-trade-game-picker data-compose-type="${sell ? "sell" : "buy"}">
+            <input type="hidden" name="gameSlug" value="${esc(selectedGame.slug || "")}" required>
+            <div class="trade-game-current">
+              <img src="${gameImage(selectedGame)}" alt="">
+              <div><span>현재 선택</span><strong>${esc(selectedGame.name || "게임 선택")}</strong></div>
+            </div>
+            <div class="trade-game-search">
+              <input type="search" data-trade-game-search placeholder="게임명 또는 초성을 검색하세요" autocomplete="off">
+              <button type="button" data-trade-game-search-button>검색</button>
+            </div>
+            <div class="trade-game-suggest" data-trade-game-suggest aria-label="게임 추천 검색어"></div>
+          </div>
         </div>
         <div class="compose-field full">
           <b>구분</b>
@@ -820,7 +831,6 @@ function tradeComposePage(user, type, db, selectedSlug = "") {
   const sell = type === "sell";
   const games = (db.games || []).filter((game) => game.visible !== false);
   const selectedGame = games.find((game) => game.slug === selectedSlug) || games[0] || {};
-  const gameOptions = games.map((game) => `<option value="${esc(game.slug)}" ${game.slug === selectedGame.slug ? "selected" : ""}>${esc(game.name)}</option>`).join("");
   const servers = gameServerList(selectedGame);
   const tradeKinds = gameTradeKinds(selectedGame);
   const sellUnits = gameFilterList(selectedGame).find((filter) => filter.label === "판매 단위")?.values || ["일반", "분할"];
@@ -835,7 +845,18 @@ function tradeComposePage(user, type, db, selectedSlug = "") {
       <section class="trade-compose__body">
         <div class="compose-field full">
           <b>게임</b>
-          <select name="gameSlug" required>${gameOptions}</select>
+          <div class="trade-game-picker" data-trade-game-picker data-compose-type="${sell ? "sell" : "buy"}">
+            <input type="hidden" name="gameSlug" value="${esc(selectedGame.slug || "")}" required>
+            <div class="trade-game-current">
+              <img src="${gameImage(selectedGame)}" alt="">
+              <div><span>현재 선택</span><strong>${esc(selectedGame.name || "게임 선택")}</strong></div>
+            </div>
+            <div class="trade-game-search">
+              <input type="search" data-trade-game-search placeholder="게임명 또는 초성을 검색하세요" autocomplete="off">
+              <button type="button" data-trade-game-search-button>검색</button>
+            </div>
+            <div class="trade-game-suggest" data-trade-game-suggest aria-label="게임 추천 검색어"></div>
+          </div>
         </div>
         <div class="compose-field full">
           <b>구분</b>
@@ -938,7 +959,7 @@ function tradeDetailPage(user, db, type, postId) {
         <section class="trade-detail-section">
           <div class="trade-detail-section-head"><h2>${memberTitle}</h2><span>거래사기 피해이력 조회</span></div>
           <div class="trade-member-card">
-            <b>${esc((member?.displayGrade || "브론즈").slice(0, 1))}</b>
+            <img src="${gradeAsset(member?.displayGrade || "브론즈")}" alt="${esc(member?.displayGrade || "브론즈")}">
             <strong>${esc(member?.displayGrade || "브론즈")}</strong>
             <span>${esc(member?.nickname || "회원")}</span>
           </div>

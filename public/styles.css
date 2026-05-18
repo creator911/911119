@@ -3215,6 +3215,132 @@ input:focus-visible {
   border-left: 0;
 }
 
+.trade-game-picker {
+  position: relative;
+  display: grid;
+  grid-template-columns: 240px minmax(0, 1fr);
+  gap: 12px;
+  align-items: center;
+}
+
+.trade-game-current {
+  display: grid;
+  grid-template-columns: 44px minmax(0, 1fr);
+  gap: 10px;
+  align-items: center;
+  min-height: 54px;
+  padding: 8px 10px;
+  border: 1px solid #d8e1ec;
+  border-radius: 8px;
+  background: #fbfcfe;
+}
+
+.trade-game-current img {
+  width: 44px;
+  height: 38px;
+  border-radius: 7px;
+  object-fit: cover;
+}
+
+.trade-game-current span,
+.trade-game-current strong {
+  display: block;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.trade-game-current span {
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.trade-game-current strong {
+  color: #0f172a;
+  font-size: 15px;
+}
+
+.trade-game-search {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 74px;
+  gap: 8px;
+}
+
+.trade-game-search button {
+  min-height: 38px;
+  border-radius: 8px;
+  background: var(--game-accent, #075bd5);
+  color: #fff;
+  font-weight: 900;
+}
+
+.trade-game-suggest {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  z-index: 30;
+  display: none;
+  width: min(520px, 100%);
+  max-height: 310px;
+  overflow-y: auto;
+  padding: 10px;
+  border: 1px solid #d8e1ec;
+  border-radius: 10px;
+  background: #fff;
+  box-shadow: 0 16px 32px rgba(15, 23, 42, .14);
+}
+
+.trade-game-suggest.is-open {
+  display: block;
+}
+
+.trade-game-suggest > b {
+  display: block;
+  margin: 0 0 8px;
+  color: #64748b;
+  font-size: 12px;
+}
+
+.trade-game-suggest-list {
+  display: grid;
+  gap: 6px;
+}
+
+.trade-game-suggest-list button {
+  display: grid;
+  grid-template-columns: 44px minmax(0, 1fr);
+  gap: 10px;
+  align-items: center;
+  min-height: 52px;
+  padding: 6px 8px;
+  border-radius: 8px;
+  background: #fff;
+  color: #0f172a;
+  text-align: left;
+  font-weight: 900;
+}
+
+.trade-game-suggest-list button:hover,
+.trade-game-suggest-list button:focus-visible {
+  background: color-mix(in srgb, var(--game-accent, #075bd5) 9%, #fff);
+}
+
+.trade-game-suggest-list img {
+  width: 44px;
+  height: 38px;
+  border-radius: 7px;
+  object-fit: cover;
+}
+
+.trade-game-suggest-list span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .compose-field--unit {
   grid-column: 1 / -1;
   order: 1;
@@ -3574,17 +3700,10 @@ input:focus-visible {
   border-radius: 8px;
 }
 
-.trade-member-card b {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
+.trade-member-card img {
   width: 56px;
   height: 56px;
-  border: 3px solid #f43f5e;
-  border-radius: 50%;
-  color: #f43f5e;
-  font-size: 24px;
-  font-weight: 900;
+  object-fit: contain;
 }
 
 .trade-member-card strong {
@@ -3838,6 +3957,15 @@ input:focus-visible {
 
   .price-presets {
     grid-column: auto;
+  }
+
+  .trade-game-picker,
+  .trade-game-search {
+    grid-template-columns: 1fr;
+  }
+
+  .trade-game-suggest {
+    width: 100%;
   }
 
   .quantity-stack {

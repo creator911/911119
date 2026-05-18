@@ -353,6 +353,70 @@ if (globalSearchForm && globalSearchInput && globalSuggest) {
   });
 }
 
+function renderTradeGameSuggestions(picker, games, title = "추천 검색어") {
+  const panel = $("[data-trade-game-suggest]", picker);
+  if (!panel) return;
+  if (!games.length) {
+    panel.innerHTML = `<b>${escapeHtml(title)}</b><p class="suggest-empty">검색 결과가 없습니다.</p>`;
+    panel.classList.add("is-open");
+    return;
+  }
+  panel.innerHTML = `<b>${escapeHtml(title)}</b><div class="trade-game-suggest-list">${games.map((game) => `
+    <button type="button" data-trade-game-select="${escapeAttr(game.slug)}">
+      <img src="${escapeAttr(game.imageUrl)}" alt="">
+      <span>${escapeHtml(game.name)}</span>
+    </button>
+  `).join("")}</div>`;
+  panel.classList.add("is-open");
+}
+
+async function loadTradeGameSuggestions(picker, query = "") {
+  const res = await fetch(`/api/search-games?q=${encodeURIComponent(query)}`);
+  if (!res.ok) return [];
+  const data = await res.json();
+  const games = data.games || [];
+  renderTradeGameSuggestions(picker, games, query ? "검색 결과" : "추천 검색어");
+  return games;
+}
+
+$$("[data-trade-game-picker]").forEach((picker) => {
+  const input = $("[data-trade-game-search]", picker);
+  const button = $("[data-trade-game-search-button]", picker);
+  let timer = null;
+  input?.addEventListener("focus", () => {
+    loadTradeGameSuggestions(picker, input.value.trim()).catch(() => {});
+  });
+  input?.addEventListener("input", () => {
+    clearTimeout(timer);
+    timer = setTimeout(() => loadTradeGameSuggestions(picker, input.value.trim()).catch(() => {}), 120);
+  });
+  input?.addEventListener("keydown", async (event) => {
+    if (event.key !== "Enter") return;
+    event.preventDefault();
+    const games = await loadTradeGameSuggestions(picker, input.value.trim()).catch(() => []);
+    if (games[0]?.slug) {
+      const base = picker.dataset.composeType === "buy" ? "/buy" : "/sell";
+      location.href = `${base}?game=${encodeURIComponent(games[0].slug)}`;
+    }
+  });
+  button?.addEventListener("click", () => {
+    loadTradeGameSuggestions(picker, input?.value.trim() || "").catch(() => {});
+  });
+});
+
+document.addEventListener("click", (event) => {
+  const gameButton = event.target.closest("[data-trade-game-select]");
+  if (gameButton) {
+    const picker = gameButton.closest("[data-trade-game-picker]");
+    const base = picker?.dataset.composeType === "buy" ? "/buy" : "/sell";
+    location.href = `${base}?game=${encodeURIComponent(gameButton.dataset.tradeGameSelect)}`;
+    return;
+  }
+  if (!event.target.closest("[data-trade-game-picker]")) {
+    $$("[data-trade-game-suggest]").forEach((panel) => panel.classList.remove("is-open"));
+  }
+});
+
 const noticeForm = $(".admin-notice-form");
 if (noticeForm) {
   const editor = $("[data-notice-editor]", noticeForm);
