@@ -784,7 +784,7 @@ function legacyTradeComposePage(user, type, db, selectedSlug = "") {
         <div class="compose-field">
           <b>가격</b>
           <div class="price-entry"><input name="price" type="number" min="0" step="1000" placeholder="${sell ? "판매 가격" : "희망 가격"}" required><span>원</span></div>
-          <div class="price-presets"><button type="button" data-price-preset="50000">+5만원</button><button type="button" data-price-preset="100000">+10만원</button><button type="button" data-price-preset="500000">+50만원</button></div>
+          <div class="price-presets"><button type="button" data-price-preset="10000">+1만원</button><button type="button" data-price-preset="50000">+5만원</button><button type="button" data-price-preset="100000">+10만원</button><button type="button" data-price-preset="500000">+50만원</button></div>
         </div>
         <div class="compose-field">
           <b>캐릭터/수량</b>
@@ -873,7 +873,7 @@ function tradeComposePage(user, type, db, selectedSlug = "") {
         <div class="compose-field compose-field--price">
           <b>가격</b>
           <div class="price-entry"><input name="price" type="number" min="0" step="1000" placeholder="${sell ? "판매 가격" : "희망 가격"}" required><span>원</span></div>
-          <div class="price-presets"><button type="button" data-price-preset="50000">+5만원</button><button type="button" data-price-preset="100000">+10만원</button><button type="button" data-price-preset="500000">+50만원</button></div>
+          <div class="price-presets"><button type="button" data-price-preset="10000">+1만원</button><button type="button" data-price-preset="50000">+5만원</button><button type="button" data-price-preset="100000">+10만원</button><button type="button" data-price-preset="500000">+50만원</button></div>
         </div>
         <div class="compose-field compose-field--quantity">
           <b>캐릭터/수량</b>
@@ -887,14 +887,31 @@ function tradeComposePage(user, type, db, selectedSlug = "") {
           <b>내용</b>
           <div class="trade-editor-wrap">
             <div class="notice-editor-toolbar trade-editor-toolbar">
+              <div class="trade-editor-tool-group">
+                <button type="button" class="trade-tool-icon" data-trade-command="undo" title="실행 취소">↶</button>
+                <button type="button" class="trade-tool-icon" data-trade-command="redo" title="다시 실행">↷</button>
+              </div>
               <select data-trade-font><option value="Malgun Gothic">맑은 고딕</option><option value="Noto Sans KR">본고딕</option><option value="Apple SD Gothic Neo">애플고딕</option><option value="Arial">Arial</option><option value="Tahoma">Tahoma</option><option value="Georgia">Georgia</option><option value="serif">명조</option><option value="sans-serif">고딕 계열</option><option value="monospace">고정폭</option></select>
               <select data-trade-size><option>10</option><option>12</option><option>14</option><option selected>16</option><option>18</option><option>20</option><option>22</option><option>24</option><option>28</option><option>32</option><option>36</option></select>
               <select data-trade-weight><option value="400">보통</option><option value="700">굵게</option><option value="900">아주 굵게</option></select>
-              <button type="button" data-trade-apply>선택 텍스트 적용</button>
-              <button type="button" data-trade-image>사진첨부</button>
+              <div class="trade-editor-tool-group">
+                <button type="button" class="trade-tool-icon trade-tool-bold" data-trade-command="bold" title="굵게">B</button>
+                <button type="button" class="trade-tool-icon trade-tool-italic" data-trade-command="italic" title="기울임">I</button>
+                <button type="button" class="trade-tool-icon trade-tool-underline" data-trade-command="underline" title="밑줄">U</button>
+                <button type="button" class="trade-tool-icon trade-tool-strike" data-trade-command="strikeThrough" title="취소선">S</button>
+              </div>
+              <div class="trade-editor-tool-group">
+                <button type="button" class="trade-tool-icon" data-trade-command="justifyLeft" title="왼쪽 정렬">좌</button>
+                <button type="button" class="trade-tool-icon" data-trade-command="justifyCenter" title="가운데 정렬">중</button>
+                <button type="button" class="trade-tool-icon" data-trade-command="justifyRight" title="오른쪽 정렬">우</button>
+                <button type="button" class="trade-tool-icon" data-trade-command="insertOrderedList" title="번호 목록">1.</button>
+                <button type="button" class="trade-tool-icon" data-trade-command="insertUnorderedList" title="글머리 목록">•</button>
+              </div>
+              <button type="button" class="trade-editor-apply" data-trade-apply>선택 텍스트 적용</button>
+              <button type="button" class="trade-editor-photo" data-trade-image>사진첨부</button>
               <input type="file" accept="image/*" data-trade-file hidden>
             </div>
-            <div class="notice-rich-editor trade-rich-editor" contenteditable="true" data-trade-editor aria-label="거래글 내용 편집기"><p>거래 조건, 연락 가능 시간, 확인이 필요한 정보를 적어주세요.</p></div>
+            <div class="notice-rich-editor trade-rich-editor" contenteditable="true" data-trade-editor aria-label="거래글 내용 편집기"></div>
             <input type="hidden" name="description">
             <input type="hidden" name="descriptionText">
           </div>

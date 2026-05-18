@@ -40,6 +40,10 @@ if (pendingTopMessage) {
   requestAnimationFrame(() => showTopMessage(pendingTopMessage));
 }
 
+document.addEventListener("mousedown", (event) => {
+  if (event.target.closest(".trade-editor-toolbar button")) event.preventDefault();
+});
+
 const chatImageSources = new Map();
 
 function openImagePreview(src, name = "") {
@@ -208,6 +212,16 @@ document.addEventListener("click", async (event) => {
   if (noticeImage) {
     const form = noticeImage.closest(".admin-notice-form");
     $("[data-notice-file]", form)?.click();
+  }
+  const tradeCommand = event.target.closest("[data-trade-command]");
+  if (tradeCommand) {
+    const form = tradeCommand.closest(".trade-compose");
+    const editor = $("[data-trade-editor]", form);
+    if (editor) {
+      document.execCommand(tradeCommand.dataset.tradeCommand, false, null);
+      editor.focus();
+      syncTradeEditor(form);
+    }
   }
   const tradeApply = event.target.closest("[data-trade-apply]");
   if (tradeApply) {
@@ -441,9 +455,6 @@ if (noticeForm) {
 $$('form[data-form="sell"], form[data-form="buy"]').forEach((form) => {
   const editor = $("[data-trade-editor]", form);
   editor?.addEventListener("input", () => syncTradeEditor(form));
-  editor?.addEventListener("focus", () => {
-    if (editor.innerText.trim() === "거래 조건, 연락 가능 시간, 확인이 필요한 정보를 적어주세요.") editor.innerHTML = "<p><br></p>";
-  });
   $("[data-trade-file]", form)?.addEventListener("change", (event) => {
     const file = event.target.files?.[0];
     if (!file || !file.type.startsWith("image/")) return;
