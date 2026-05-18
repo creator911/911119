@@ -553,6 +553,36 @@ th, td {
 }
 td button { margin-right: 6px; min-height: 34px; }
 
+.panel-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+
+.panel-head h2 {
+  margin: 0;
+}
+
+.admin-refresh-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 30px;
+  padding: 0 12px;
+  border: 1px solid #bfd2ea;
+  border-radius: 7px;
+  background: #fff;
+  color: #075bdc;
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.admin-refresh-button:hover {
+  background: #eef5ff;
+}
+
 .account-admin-form h2 {
   margin-bottom: 4px;
 }
@@ -716,6 +746,173 @@ td button { margin-right: 6px; min-height: 34px; }
 
 .admin-page .admin-account-inputs {
   gap: 3px;
+}
+
+.admin-scroll-anchor {
+  position: relative;
+  top: -72px;
+  display: block;
+  height: 0;
+  scroll-margin-top: 72px;
+}
+
+.admin-page .point-request-panel table {
+  border-spacing: 0 4px;
+  border-collapse: separate;
+  table-layout: fixed;
+}
+
+.admin-page .point-request-panel th:nth-child(1),
+.admin-page .point-request-panel td:nth-child(1) {
+  width: 4%;
+}
+
+.admin-page .point-request-panel th:nth-child(2),
+.admin-page .point-request-panel td:nth-child(2) {
+  width: 10%;
+}
+
+.admin-page .point-request-panel th:nth-child(3),
+.admin-page .point-request-panel td:nth-child(3) {
+  width: 9%;
+}
+
+.admin-page .point-request-panel th:nth-child(4),
+.admin-page .point-request-panel td:nth-child(4) {
+  width: 12%;
+}
+
+.admin-page .point-request-panel th:nth-child(5),
+.admin-page .point-request-panel td:nth-child(5) {
+  width: 33%;
+}
+
+.admin-page .point-request-panel th:nth-child(6),
+.admin-page .point-request-panel td:nth-child(6) {
+  width: 5%;
+  text-align: center;
+}
+
+.admin-page .point-request-panel th:nth-child(7),
+.admin-page .point-request-panel td:nth-child(7) {
+  width: 27%;
+  text-align: right;
+}
+
+.admin-page .point-request-panel th {
+  padding: 6px 4px;
+  border-bottom: 1px solid #d7e0ec;
+  background: #f8fbff;
+  color: #475569;
+  font-weight: 900;
+}
+
+.admin-page .point-request-panel td {
+  height: 46px;
+  padding: 6px 4px;
+  border-top: 1px solid #e3ebf5;
+  border-bottom: 1px solid #e3ebf5;
+  background: #fff;
+  vertical-align: middle;
+}
+
+.admin-page .point-request-panel td:nth-child(1),
+.admin-page .point-request-panel td:nth-child(2),
+.admin-page .point-request-panel td:nth-child(3),
+.admin-page .point-request-panel td:nth-child(4),
+.admin-page .point-request-panel td:nth-child(6) {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.admin-page .point-request-panel tr td:first-child {
+  border-left: 1px solid #e3ebf5;
+  border-radius: 8px 0 0 8px;
+}
+
+.admin-page .point-request-panel tr td:last-child {
+  border-right: 1px solid #e3ebf5;
+  border-radius: 0 8px 8px 0;
+  min-width: 0;
+  white-space: nowrap;
+}
+
+.admin-page .point-request-panel .point-row.charge td {
+  background: #f7fbff;
+}
+
+.admin-page .point-request-panel .point-row.withdraw td {
+  background: #f7fff9;
+}
+
+.point-type {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 32px;
+  min-height: 22px;
+  padding: 0 5px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 900;
+}
+
+.point-type.charge {
+  background: #eaf3ff;
+  color: #075bdc;
+}
+
+.point-type.withdraw {
+  background: #eaf8ef;
+  color: #0f9442;
+}
+
+.point-account {
+  display: grid;
+  gap: 2px;
+  padding: 0 7px;
+  color: #0f172a;
+  line-height: 1.25;
+}
+
+.point-account b,
+.point-account span,
+.point-account small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.point-account b {
+  font-size: 12px;
+}
+
+.point-account span {
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.point-account small {
+  color: #64748b;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.point-account.empty {
+  display: inline;
+  padding: 0;
+  color: #94a3b8;
+}
+
+.admin-page .point-request-panel td button {
+  min-height: 27px;
+  margin: 0 0 0 2px;
+  padding: 0 6px;
+  border-radius: 6px;
+  font-size: 11px;
+  line-height: 1;
+  white-space: nowrap;
 }
 
 .staff-page {
@@ -5631,6 +5828,104 @@ input:focus-visible {
 .mileage-form .form-message {
   min-height: 22px;
   margin: 0;
+}
+
+.withdraw-confirm-layer {
+  position: fixed;
+  inset: 0;
+  z-index: 1200;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  background: rgba(15, 23, 42, .42);
+}
+
+.withdraw-confirm-layer[hidden] {
+  display: none;
+}
+
+.withdraw-confirm-card {
+  width: min(430px, 100%);
+  padding: 24px;
+  border: 1px solid #dfe6ef;
+  border-radius: 14px;
+  background: #fff;
+  box-shadow: 0 22px 50px rgba(15, 23, 42, .22);
+}
+
+.withdraw-confirm-card h2 {
+  margin: 0 0 8px;
+  color: #111827;
+  font-size: 21px;
+  font-weight: 900;
+}
+
+.withdraw-confirm-card p {
+  margin: 0 0 18px;
+  color: #64748b;
+  font-size: 14px;
+  font-weight: 800;
+}
+
+.withdraw-confirm-card label {
+  display: grid;
+  gap: 8px;
+  margin-bottom: 13px;
+  color: #475569;
+  font-size: 14px;
+  font-weight: 900;
+}
+
+.withdraw-confirm-card select,
+.withdraw-confirm-card input {
+  width: 100%;
+  height: 46px;
+  padding: 0 13px;
+  border: 1px solid #d7e0ec;
+  border-radius: 9px;
+  background: #fff;
+  color: #111827;
+  font-size: 15px;
+  font-weight: 800;
+}
+
+.withdraw-confirm-summary {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  margin: 16px 0;
+  padding: 14px 0 0;
+  border-top: 1px solid #edf2f8;
+  color: #64748b;
+  font-size: 14px;
+  font-weight: 900;
+}
+
+.withdraw-confirm-summary b {
+  color: #075bdc;
+  font-size: 20px;
+}
+
+.withdraw-confirm-actions {
+  display: grid;
+  grid-template-columns: 1fr 1.35fr;
+  gap: 10px;
+}
+
+.withdraw-confirm-actions button {
+  min-height: 46px;
+  border-radius: 9px;
+  background: #075bdc;
+  color: #fff;
+  font-size: 15px;
+  font-weight: 900;
+}
+
+.withdraw-confirm-actions .ghost {
+  border: 1px solid #d7e0ec;
+  background: #fff;
+  color: #475569;
 }
 
 @media (max-width: 900px) {

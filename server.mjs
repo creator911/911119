@@ -24,6 +24,14 @@ const DISPLAY_GRADES = ["브론즈", "실버", "골드", "플레티넘", "다이
 const MEMBER_GRADES = ["브론즈", "실버", "골드", "플레티넘", "다이아"];
 const INTERNAL_GRADES = Array.from({ length: 10 }, (_, index) => `${index + 1}급`);
 const ROLES = ["MEMBER", "STAFF", "OWNER"];
+const WITHDRAW_BANKS = [
+  "KB국민은행", "신한은행", "우리은행", "하나은행", "NH농협은행", "IBK기업은행", "SC제일은행", "한국씨티은행",
+  "KDB산업은행", "Sh수협은행", "DGB대구은행", "BNK부산은행", "광주은행", "제주은행", "전북은행", "BNK경남은행",
+  "새마을금고", "신협", "우체국", "저축은행", "산림조합", "케이뱅크", "토스뱅크",
+  "KB증권", "NH투자증권", "미래에셋증권", "삼성증권", "한국투자증권", "키움증권", "신한투자증권", "대신증권",
+  "하나증권", "메리츠증권", "유안타증권", "교보증권", "하이투자증권", "현대차증권", "DB금융투자",
+  "한화투자증권", "유진투자증권", "LS증권", "SK증권", "부국증권", "신영증권", "케이프투자증권", "다올투자증권"
+];
 const DEFAULT_NOTICE_POSTS = [
   { noticeNo: 50, pinned: false, title: "[업데이트 안내] 게임머니·아이템·기타 분할거래 기능 추가", date: "2026-04-30T15:40:00+09:00", body: "안녕하세요.\n\n아이템존입니다.\n\n거래 완료를 기다릴 필요 없이 여러 구매자와 동시에 거래가 가능하도록 분할거래 기능이 개선되었습니다.\n\n[기존]\n분할거래는 최초 신청된 거래가 완료되어야 남은 수량이 재등록됩니다.\n\n[변경]\n1. 거래중 상태에서도 남은 수량 자동 재등록\n- 다수의 거래자와 동시에 거래 가능\n\n2. 프리미엄 글 자동 유지\n- 최초 등록된 분할글이 프리미엄 옵션 글일 경우 남은 수량 재등록 시에도 혜택 유지\n\n앞으로도 편리하고 안전한 거래 환경을 제공하겠습니다.\n\n감사합니다." },
   { noticeNo: 49, pinned: false, title: "[당첨자 안내] 서든어택 이벤트 2", date: "2026-04-02T12:00:00+09:00", body: "서든어택 이벤트 당첨자를 안내드립니다.\n\n마이페이지의 고객센터 문의를 통해 지급 정보를 확인해주세요." },
@@ -1285,6 +1293,7 @@ function pointPage(user, db, type) {
   const charge = type === "charge";
   const balance = Number(user?.points || 0);
   const presets = [["50000", "+5만"], ["100000", "+10만"], ["500000", "+50만"]];
+  const bankOptions = WITHDRAW_BANKS.map((bank) => `<option value="${esc(bank)}">${esc(bank)}</option>`).join("");
   return layout(charge ? "마일리지충전" : "마일리지출금", user, `<main class="mileage-page ${charge ? "charge-page" : "withdraw-page"}">
     <section class="mileage-info-panel">
       <h1>${charge ? "충전전용계좌" : "본인 계좌 출금"}</h1>
@@ -1324,6 +1333,32 @@ function pointPage(user, db, type) {
         <p class="form-message"></p>
       </form>
     </aside>
+    ${!charge ? `<div class="withdraw-confirm-layer" data-withdraw-modal hidden>
+      <section class="withdraw-confirm-card" role="dialog" aria-modal="true" aria-labelledby="withdrawConfirmTitle">
+        <h2 id="withdrawConfirmTitle">출금 계좌 확인</h2>
+        <p>입력하신 계좌로 출금 신청이 접수됩니다.</p>
+        <label>은행/증권사
+          <select name="withdrawBank" required>
+            <option value="">은행 또는 증권사를 선택하세요</option>
+            ${bankOptions}
+          </select>
+        </label>
+        <label>계좌번호
+          <input name="withdrawAccountNumber" inputmode="numeric" autocomplete="off" placeholder="계좌번호를 입력하세요" required>
+        </label>
+        <label>예금주명
+          <input name="withdrawHolder" autocomplete="name" placeholder="예금주명을 입력하세요" value="${esc(user?.name || user?.nickname || "")}" required>
+        </label>
+        <div class="withdraw-confirm-summary">
+          <span>출금 신청 금액</span>
+          <b data-withdraw-confirm-amount>0원</b>
+        </div>
+        <div class="withdraw-confirm-actions">
+          <button type="button" class="ghost" data-withdraw-cancel>취소</button>
+          <button type="button" data-withdraw-confirm>출금신청 확정</button>
+        </div>
+      </section>
+    </div>` : ""}
     ${chatWidget(user)}
   </main>`, "point");
 }
@@ -1393,14 +1428,13 @@ function adminPage(user, db) {
   const editCell = (name, value, type = "text") => `<div class="admin-edit-field" data-admin-field="${name}"><span>${esc(value || "-")}</span><input name="${name}" type="${type}" value="${esc(value || "")}" hidden><button type="button" data-admin-edit="${name}">수정</button></div>`;
   const passwordCell = () => `<div class="admin-edit-field password" data-admin-field="password"><span>변경 전용</span><input name="password" type="password" value="" placeholder="새 비밀번호" hidden><button type="button" data-admin-edit="password">수정</button></div>`;
   const selectCell = (name, value, options) => `<div class="admin-edit-field" data-admin-field="${name}"><span>${esc(value || "-")}</span><select name="${name}" hidden>${options.map((option) => `<option value="${esc(option)}" ${option === value ? "selected" : ""}>${esc(option)}</option>`).join("")}</select><button type="button" data-admin-edit="${name}">수정</button></div>`;
-  const accountCell = (u) => `<div class="admin-edit-field account" data-admin-field="account"><span>${esc(`${u.bank || "-"} ${u.accountNumber || ""}`.trim())}</span><div class="admin-account-inputs" hidden><input name="bank" value="${esc(u.bank || "")}" placeholder="은행"><input name="accountNumber" value="${esc(u.accountNumber || "")}" placeholder="계좌번호"></div><button type="button" data-admin-edit="account">수정</button></div>`;
   const roleOptions = user.role === "OWNER" ? ROLES : ROLES.filter((role) => role !== "OWNER");
   const users = db.users.map((u) => `<tr data-admin-user-row="${esc(u.id)}">
     <td>${editCell("username", u.username)}</td>
     <td>${passwordCell()}</td>
     <td>${editCell("nickname", u.nickname)}</td>
     <td>${editCell("phone", u.phone)}</td>
-    <td>${accountCell(u)}</td>
+    <td>${editCell("name", u.name)}</td>
     <td>${selectCell("role", u.role, roleOptions.includes(u.role) ? roleOptions : [u.role, ...roleOptions])}</td>
     <td>${selectCell("displayGrade", u.displayGrade, DISPLAY_GRADES)}</td>
     <td>${selectCell("internalGrade", normalizeInternalGrade(u.internalGrade), INTERNAL_GRADES)}</td>
@@ -1410,6 +1444,10 @@ function adminPage(user, db) {
   const reqs = db.pointRequests.slice().reverse().map((r) => {
     const member = db.users.find((u) => u.id === r.userId);
     const status = String(r.status || "대기");
+    const isWithdraw = r.type === "withdraw";
+    const withdrawAccount = isWithdraw && r.withdrawAccount
+      ? `<div class="point-account"><b>${esc(r.withdrawAccount.bank || "-")}</b><span>${esc(r.withdrawAccount.number || "-")}</span><small>${esc(r.withdrawAccount.holder || "-")}</small></div>`
+      : `<span class="point-account empty">-</span>`;
     const isPending = status === "대기";
     const isApproved = ["approved", "승인", "완료", "처리완료"].includes(status);
     const actions = isPending
@@ -1417,7 +1455,7 @@ function adminPage(user, db) {
       : isApproved
         ? `<button data-point="${r.id}" data-decision="rollback">롤백</button><button data-point="${r.id}" data-decision="deleted">삭제</button>`
         : `<button data-point="${r.id}" data-decision="deleted">삭제</button>`;
-    return `<tr><td>${r.type === "charge" ? "충전" : "출금"}</td><td>${member?.nickname || "-"}</td><td>${Number(r.amount).toLocaleString()}</td><td>${esc(status)}</td><td>${actions}</td></tr>`;
+    return `<tr class="point-row ${isWithdraw ? "withdraw" : "charge"}"><td><span class="point-type ${isWithdraw ? "withdraw" : "charge"}">${isWithdraw ? "출금" : "충전"}</span></td><td>${esc(member?.nickname || r.nickname || "-")}</td><td>${esc(r.name || member?.name || "-")}</td><td>${Number(r.amount).toLocaleString()}원</td><td>${withdrawAccount}</td><td>${esc(status)}</td><td>${actions}</td></tr>`;
   }).join("");
   const latestNotices = noticePosts(db).slice(0, 6).map((post) => `<li><a href="/notices/${encodeURIComponent(post.id)}">${post.pinned ? "[상단고정] " : ""}${esc(post.title)}</a><span>${noticeDate(post.createdAt)}</span></li>`).join("");
   const noticeInputDate = new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 16);
@@ -1455,8 +1493,8 @@ function adminPage(user, db) {
       </form>
       <ul class="admin-notice-list">${latestNotices}</ul>
     </section>
-    <section class="panel table-panel"><h2>회원 개인정보/등급 관리</h2><table><thead><tr><th>ID</th><th>비밀번호</th><th>닉네임</th><th>전화</th><th>계좌</th><th>권한</th><th>표시등급</th><th>내부등급</th><th>마일리지</th><th></th></tr></thead><tbody>${users}</tbody></table></section>
-    <section class="panel table-panel"><h2>충전/출금 신청</h2><table><tbody>${reqs || "<tr><td>신청 내역이 없습니다.</td></tr>"}</tbody></table></section>
+    <section class="panel table-panel"><h2>회원 개인정보/등급 관리</h2><table><thead><tr><th>ID</th><th>비밀번호</th><th>닉네임</th><th>전화</th><th>이름</th><th>권한</th><th>표시등급</th><th>내부등급</th><th>마일리지</th><th></th></tr></thead><tbody>${users}</tbody></table></section>
+    <span id="pointRequests" class="admin-scroll-anchor"></span><section class="panel table-panel point-request-panel"><div class="panel-head"><h2>충전/출금 신청</h2><a href="/admin?refresh=${Date.now()}#pointRequests" class="admin-refresh-button">새로고침</a></div><table><thead><tr><th>구분</th><th>닉네임</th><th>이름</th><th>금액</th><th>출금계좌</th><th>상태</th><th></th></tr></thead><tbody>${reqs || "<tr><td colspan='7'>신청 내역이 없습니다.</td></tr>"}</tbody></table></section>
   </main>`, "admin");
 }
 
@@ -1580,17 +1618,18 @@ async function api(req, res, db, user, pathname) {
       const data = await body(req);
       const username = String(data.username || "").trim();
       const nickname = String(data.nickname || "").trim();
+      const realName = String(data.realName || "").trim();
       const password = String(data.password || "");
       const passwordConfirm = String(data.passwordConfirm || "");
       const phoneMid = String(data.phoneMid || "").replace(/\D/g, "");
       const phoneLast = String(data.phoneLast || "").replace(/\D/g, "");
       const phone = `010-${phoneMid}-${phoneLast}`;
-      if (!username || !nickname || !password || !data.phoneCarrier || phoneMid.length !== 4 || phoneLast.length !== 4) return send(res, 400, { error: "입력값을 확인하세요." });
+      if (!username || !nickname || !realName || !password || !data.phoneCarrier || phoneMid.length !== 4 || phoneLast.length !== 4) return send(res, 400, { error: "입력값을 확인하세요." });
       if (!/^(?=.*[a-z])(?=.*\d)[a-z\d]{8,}$/.test(password)) return send(res, 400, { error: "비밀번호는 8자 이상 영문 소문자와 숫자를 조합해주세요." });
       if (password !== passwordConfirm) return send(res, 400, { error: "패스워드 재확인이 일치하지 않습니다." });
       if (db.users.some((u) => String(u.username || "").toLowerCase() === username.toLowerCase())) return send(res, 409, { error: "이미 사용 중인 아이디입니다." });
       if (db.users.some((u) => String(u.nickname || "").toLowerCase() === nickname.toLowerCase())) return send(res, 409, { error: "이미 사용 중인 닉네임입니다." });
-      const newUser = { id: id("user"), username, passwordHash: await hashPassword(password), nickname, phone, phoneCarrier: data.phoneCarrier, bank: "-", accountNumber: "-", displayGrade: "브론즈", internalGrade: "1급", role: "MEMBER", status: "정상", points: 0, createdAt: now() };
+      const newUser = { id: id("user"), username, passwordHash: await hashPassword(password), nickname, name: realName, phone, phoneCarrier: data.phoneCarrier, bank: "-", accountNumber: "-", displayGrade: "브론즈", internalGrade: "1급", role: "MEMBER", status: "정상", points: 0, createdAt: now() };
       db.users.push(newUser); await writeDb(db);
       return send(res, 200, { ok: true }, { "Set-Cookie": sessionCookie(newUser.id) });
     }
@@ -1667,9 +1706,20 @@ async function api(req, res, db, user, pathname) {
       if (!protect(user, "member")) return send(res, 401, { error: "로그인이 필요합니다." });
       const data = await body(req);
       const amount = Number(data.amount);
+      if (!["charge", "withdraw"].includes(data.type)) return send(res, 400, { error: "신청 종류를 확인하세요." });
       if (!Number.isFinite(amount) || amount <= 0) return send(res, 400, { error: "신청 금액을 확인하세요." });
       if (data.type === "withdraw" && amount > Number(user.points || 0)) return send(res, 400, { error: "출금 가능 마일리지를 초과했습니다." });
-      db.pointRequests.push({ id: id("point"), userId: user.id, type: data.type, amount, status: "대기", createdAt: now(), handledBy: null, handledAt: null });
+      let withdrawAccount = null;
+      if (data.type === "withdraw") {
+        if (amount < 2000) return send(res, 400, { error: "최소 출금 금액은 2,000원입니다." });
+        const bank = String(data.withdrawBank || "").trim();
+        const number = String(data.withdrawAccountNumber || "").trim();
+        const holder = String(data.withdrawHolder || "").trim();
+        if (!WITHDRAW_BANKS.includes(bank)) return send(res, 400, { error: "출금 은행을 선택하세요." });
+        if (!number || !holder) return send(res, 400, { error: "출금 계좌번호와 예금주명을 입력하세요." });
+        withdrawAccount = { bank, number, holder };
+      }
+      db.pointRequests.push({ id: id("point"), userId: user.id, type: data.type, amount, nickname: user.nickname || "", name: user.name || "", withdrawAccount, status: "대기", createdAt: now(), handledBy: null, handledAt: null });
       await writeDb(db); return send(res, 200, { ok: true, account: db.site.chargeAccount });
     }
     if (pathname === "/api/admin/site" && req.method === "POST") {
@@ -1718,7 +1768,7 @@ async function api(req, res, db, user, pathname) {
     if (pathname === "/api/admin/staff" && req.method === "POST") {
       if (user?.role !== "OWNER") return send(res, 403, { error: "챌린저 계정만 운영진을 생성할 수 있습니다." });
       const data = await body(req);
-      db.users.push({ id: id("user"), username: data.username, passwordHash: await hashPassword(data.password), nickname: data.nickname, phone: "-", bank: "-", accountNumber: "-", displayGrade: "마스터", internalGrade: "1급", role: ROLES.includes(data.role) ? data.role : "STAFF", status: "정상", points: 0, createdAt: now() });
+      db.users.push({ id: id("user"), username: data.username, passwordHash: await hashPassword(data.password), nickname: data.nickname, name: "", phone: "-", bank: "-", accountNumber: "-", displayGrade: "마스터", internalGrade: "1급", role: ROLES.includes(data.role) ? data.role : "STAFF", status: "정상", points: 0, createdAt: now() });
       audit(db, user, "STAFF_CREATE"); await writeDb(db); return send(res, 200, { ok: true });
     }
     if (pathname === "/api/admin/user" && req.method === "POST") {
@@ -1733,14 +1783,13 @@ async function api(req, res, db, user, pathname) {
       if (db.users.some((item) => item.id !== target.id && String(item.nickname || "").toLowerCase() === nickname.toLowerCase())) return send(res, 409, { error: "이미 사용 중인 닉네임입니다." });
       target.username = username;
       target.nickname = nickname;
+      target.name = String(data.name || "").trim();
       const nextPassword = String(data.password || "").trim();
       if (nextPassword) {
         if (!/^(?=.*[a-z])(?=.*\d)[a-z\d]{8,}$/.test(nextPassword)) return send(res, 400, { error: "비밀번호는 8자 이상, 영문 소문자와 숫자를 조합해주세요." });
         target.passwordHash = await hashPassword(nextPassword);
       }
       target.phone = String(data.phone || "").trim();
-      target.bank = String(data.bank || "").trim();
-      target.accountNumber = String(data.accountNumber || "").trim();
       if (ROLES.includes(data.role)) {
         if (data.role === "OWNER" && user.role !== "OWNER") return send(res, 403, { error: "오너 권한은 오너만 지정할 수 있습니다." });
         target.role = data.role;

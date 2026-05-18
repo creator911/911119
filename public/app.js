@@ -419,6 +419,53 @@ $$(".mileage-form").forEach((form) => {
   form.elements.amount?.addEventListener("input", () => updateMileageForm(form));
 });
 
+let pendingWithdrawForm = null;
+
+function closeWithdrawModal() {
+  const modal = $("[data-withdraw-modal]");
+  if (!modal) return;
+  modal.hidden = true;
+  pendingWithdrawForm = null;
+}
+
+function openWithdrawModal(form) {
+  const modal = $("[data-withdraw-modal]");
+  if (!modal) return false;
+  pendingWithdrawForm = form;
+  const amount = Number(form.elements.amount?.value || 0);
+  const amountTarget = $("[data-withdraw-confirm-amount]", modal);
+  if (amountTarget) amountTarget.textContent = formatWon(amount);
+  modal.hidden = false;
+  modal.querySelector("select, input")?.focus();
+  return true;
+}
+
+async function confirmWithdrawRequest() {
+  const modal = $("[data-withdraw-modal]");
+  const form = pendingWithdrawForm;
+  if (!modal || !form) return;
+  const message = $(".form-message", form);
+  const bank = modal.querySelector("[name='withdrawBank']")?.value.trim();
+  const accountNumber = modal.querySelector("[name='withdrawAccountNumber']")?.value.trim();
+  const holder = modal.querySelector("[name='withdrawHolder']")?.value.trim();
+  if (!bank || !accountNumber || !holder) {
+    if (message) message.textContent = "은행, 계좌번호, 예금주명을 입력해주세요.";
+    return;
+  }
+  const data = formData(form);
+  const result = await post("/api/point-request", {
+    ...data,
+    type: "withdraw",
+    withdrawBank: bank,
+    withdrawAccountNumber: accountNumber,
+    withdrawHolder: holder
+  });
+  closeWithdrawModal();
+  form.reset();
+  updateMileageForm(form);
+  if (message) message.textContent = result.message || "출금 신청이 접수되었습니다.";
+}
+
 document.addEventListener("click", (event) => {
   const amountPreset = event.target.closest("[data-point-amount]");
   if (!amountPreset) return;
@@ -429,6 +476,26 @@ document.addEventListener("click", (event) => {
   const value = Number(amountPreset.dataset.pointAmount || 0);
   input.value = current + value;
   updateMileageForm(form);
+});
+
+document.addEventListener("click", (event) => {
+  if (event.target.closest("[data-withdraw-cancel]")) {
+    closeWithdrawModal();
+    return;
+  }
+  if (event.target.closest("[data-withdraw-confirm]")) {
+    confirmWithdrawRequest().catch((error) => {
+      const message = pendingWithdrawForm ? $(".form-message", pendingWithdrawForm) : null;
+      if (message) message.textContent = error.message;
+    });
+    return;
+  }
+  const modal = event.target.closest("[data-withdraw-modal]");
+  if (modal && event.target === modal) closeWithdrawModal();
+});
+
+document.addEventListener("keydown", (event) => {
+  if (event.key === "Escape") closeWithdrawModal();
 });
 
 const signupAvailability = new Map();
@@ -532,6 +599,7 @@ $$("form[data-form]").forEach((form) => {
         sessionStorage.setItem("topMessage", doneMessage);
         location.href = "/";
       } else if (type === "charge" || type === "withdraw") {
+        if (type === "withdraw" && openWithdrawModal(form)) return;
         const result = await post("/api/point-request", { ...data, type });
         message.textContent = type === "charge" ? `신청완료: ${result.account.bank} ${result.account.number} (${result.account.holder})` : "출금 신청이 접수되었습니다.";
       } else if (type === "site") {
