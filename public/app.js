@@ -20,6 +20,26 @@ function escapeAttr(value) {
   return escapeHtml(value).replace(/`/g, "&#96;");
 }
 
+function showTopMessage(text) {
+  let toast = $("#topMessage");
+  if (!toast) {
+    toast = document.createElement("div");
+    toast.id = "topMessage";
+    toast.className = "top-message";
+    document.body.appendChild(toast);
+  }
+  toast.textContent = text;
+  toast.classList.add("is-open");
+  clearTimeout(showTopMessage.timer);
+  showTopMessage.timer = setTimeout(() => toast.classList.remove("is-open"), 2600);
+}
+
+const pendingTopMessage = sessionStorage.getItem("topMessage");
+if (pendingTopMessage) {
+  sessionStorage.removeItem("topMessage");
+  requestAnimationFrame(() => showTopMessage(pendingTopMessage));
+}
+
 const chatImageSources = new Map();
 
 function openImagePreview(src, name = "") {
@@ -43,6 +63,7 @@ function openImagePreview(src, name = "") {
 
 function openMemberChat() {
   if (!chatWidget) return false;
+  closeDirectChat();
   chatWidget.classList.add("open");
   chatOpen?.classList.add("is-open");
   chatOpen?.setAttribute("aria-expanded", "true");
@@ -91,6 +112,20 @@ document.addEventListener("click", async (event) => {
     }
     return;
   }
+  const directChatStart = event.target.closest("[data-direct-chat-start]");
+  if (directChatStart) {
+    event.preventDefault();
+    directChatStart.disabled = true;
+    try {
+      const result = await post("/api/direct-chat/start", { type: directChatStart.dataset.directChatStart, id: directChatStart.dataset.tradeId });
+      openDirectChat(result.room?.id);
+    } catch (error) {
+      alert(error.message);
+    } finally {
+      directChatStart.disabled = false;
+    }
+    return;
+  }
   const chatImage = event.target.closest("[data-chat-image-id], [data-chat-image]");
   if (chatImage) {
     event.preventDefault();
@@ -113,16 +148,33 @@ document.addEventListener("click", async (event) => {
   }
   const pointBtn = event.target.closest("[data-point]");
   if (pointBtn) {
+    if (pointBtn.dataset.decision === "rollback" && !confirm("완료 처리한 마일리지를 롤백할까요?")) return;
+    if (pointBtn.dataset.decision === "deleted" && !confirm("이 충전/출금 신청을 삭제 처리할까요?")) return;
     await post("/api/admin/point", { id: pointBtn.dataset.point, decision: pointBtn.dataset.decision });
     location.reload();
+    return;
   }
-  const userBtn = event.target.closest("[data-admin-user]");
-  if (userBtn) {
-    const displayGrade = prompt("표시등급 입력: 브론즈/실버/골드/플레티넘/다이아/마스터/챌린저");
-    const internalGrade = prompt("내부등급 입력: 내부등급 1~5");
-    const status = prompt("상태 입력: 정상/정지", "정상");
-    await post("/api/admin/user", { id: userBtn.dataset.adminUser, displayGrade, internalGrade, status });
+  const adminEdit = event.target.closest("[data-admin-edit]");
+  if (adminEdit) {
+    const field = adminEdit.closest("[data-admin-field]");
+    if (!field) return;
+    field.classList.add("editing");
+    $$("input, select", field).forEach((input) => { input.hidden = false; });
+    const grouped = $(".admin-account-inputs", field);
+    if (grouped) grouped.hidden = false;
+    $("span", field)?.setAttribute("hidden", "");
+    adminEdit.hidden = true;
+    return;
+  }
+  const adminSave = event.target.closest("[data-admin-user-save]");
+  if (adminSave) {
+    const row = adminSave.closest("[data-admin-user-row]");
+    if (!row) return;
+    const data = { id: adminSave.dataset.adminUserSave };
+    $$("input, select", row).forEach((input) => { data[input.name] = input.value; });
+    await post("/api/admin/user", data);
     location.reload();
+    return;
   }
   const noticeToggle = event.target.closest("[data-toggle-notice-form]");
   if (noticeToggle) {
@@ -225,7 +277,7 @@ document.addEventListener("click", (event) => {
   if (!preset) return;
   const form = preset.closest("form");
   const input = form?.querySelector("input[name='price']");
-  if (input) input.value = preset.dataset.pricePreset;
+  if (input) input.value = Number(input.value || 0) + Number(preset.dataset.pricePreset || 0);
 });
 
 const bannerDots = $$(".banner-dots i");
@@ -375,7 +427,7 @@ document.addEventListener("click", (event) => {
   if (!input) return;
   const current = Number(input.value || 0);
   const value = Number(amountPreset.dataset.pointAmount || 0);
-  input.value = form.dataset.form === "charge" ? current + value : value;
+  input.value = current + value;
   updateMileageForm(form);
 });
 
@@ -476,8 +528,9 @@ $$("form[data-form]").forEach((form) => {
         location.href = "/";
       } else if (type === "sell" || type === "buy") {
         await post("/api/trade", { ...data, type });
-        message.textContent = "등록되었습니다.";
-        form.reset();
+        const doneMessage = type === "sell" ? "판매글이 등록되었습니다." : "구매글이 등록되었습니다.";
+        sessionStorage.setItem("topMessage", doneMessage);
+        location.href = "/";
       } else if (type === "charge" || type === "withdraw") {
         const result = await post("/api/point-request", { ...data, type });
         message.textContent = type === "charge" ? `신청완료: ${result.account.bank} ${result.account.number} (${result.account.holder})` : "출금 신청이 접수되었습니다.";
@@ -566,7 +619,9 @@ if (chatOpen && chatWidget) {
     loadMemberChat();
   });
   updateChatSendState();
+  loadMemberUnread();
   setInterval(() => chatWidget.classList.contains("open") && loadMemberChat(), 2500);
+  setInterval(loadMemberUnread, 2500);
 }
 
 async function loadMemberChat() {
@@ -588,6 +643,19 @@ async function loadMemberChat() {
     return `<p class="${side}" data-message-id="${escapeAttr(m.id)}"><b>${escapeHtml(name)}</b>${action}${text}${image}</p>`;
   }).join("");
   log.scrollTop = log.scrollHeight;
+  setMemberUnread(0);
+}
+
+function setMemberUnread(count = 0) {
+  chatOpen?.classList.toggle("has-unread", Number(count) > 0);
+}
+
+async function loadMemberUnread() {
+  if (!chatOpen) return;
+  const res = await fetch("/api/chat/member/unread");
+  if (!res.ok) return;
+  const data = await res.json();
+  setMemberUnread(data.unread || 0);
 }
 
 document.addEventListener("click", async (event) => {
@@ -610,6 +678,220 @@ document.addEventListener("click", async (event) => {
   }
 });
 
+const directChatOpen = $("#directChatOpen");
+const directChatWidget = $("#directChatWidget");
+const directChatClose = $("#directChatClose");
+const directChatBack = $("#directChatBack");
+const directChatRooms = $("#directChatRooms");
+const directChatLog = $("#directChatLog");
+const directChatSend = $("#directChatSend");
+const directChatTitle = $("#directChatTitle");
+const directChatFileInput = $("#directChatFileInput");
+const directChatAttachmentPreview = $("#directChatAttachmentPreview");
+let activeDirectRoom = null;
+let selectedDirectAttachment = null;
+
+function closeDirectChat() {
+  directChatWidget?.classList.remove("open");
+  directChatOpen?.classList.remove("is-open");
+  directChatOpen?.setAttribute("aria-expanded", "false");
+}
+
+function directChatHeader(room = null) {
+  if (!directChatTitle) return;
+  if (!room) {
+    directChatTitle.innerHTML = `<b>채팅</b>`;
+    return;
+  }
+  directChatTitle.innerHTML = `<span class="direct-chat-peer"><img src="${escapeAttr(room.peerGradeAsset || "")}" alt=""><span><b>${escapeHtml(room.peerNickname || "회원")}</b><small>${escapeHtml(room.tradeTitle || "거래글")}</small></span></span>`;
+}
+
+function directChatEmpty(text) {
+  return `<p class="direct-chat-empty">${escapeHtml(text)}</p>`;
+}
+
+function setDirectUnread(count = 0) {
+  directChatOpen?.classList.toggle("has-unread", Number(count) > 0);
+}
+
+function showDirectRoomList() {
+  activeDirectRoom = null;
+  directChatWidget?.classList.add("is-list");
+  directChatBack?.setAttribute("hidden", "");
+  if (directChatRooms) directChatRooms.hidden = false;
+  if (directChatLog) {
+    directChatLog.hidden = true;
+    directChatLog.innerHTML = "";
+  }
+  if (directChatSend) directChatSend.hidden = true;
+  clearDirectAttachment();
+  directChatHeader();
+}
+
+async function loadDirectRooms() {
+  if (!directChatRooms) return;
+  const res = await fetch("/api/direct-chat/rooms");
+  if (!res.ok) return;
+  const { rooms } = await res.json();
+  setDirectUnread((rooms || []).reduce((sum, room) => sum + Number(room.unread || 0), 0));
+  directChatRooms.innerHTML = rooms.map((room) => `<button type="button" class="direct-room-row ${activeDirectRoom === room.id ? "active" : ""}" data-direct-room="${escapeAttr(room.id)}">
+    <img src="${escapeAttr(room.peerGradeAsset || "")}" alt="">
+    <span>
+      <b>${escapeHtml(room.peerNickname || "회원")}</b>
+      <small>${escapeHtml(room.tradeTitle || "거래글")}</small>
+      <em>${escapeHtml(room.lastMessage || "아직 대화가 없습니다.")}</em>
+    </span>
+    ${room.unread ? `<i>${Number(room.unread)}</i>` : ""}
+  </button>`).join("") || directChatEmpty("현재 채팅이 없습니다.");
+}
+
+async function loadDirectMessages() {
+  if (!activeDirectRoom || !directChatLog) return;
+  const res = await fetch(`/api/direct-chat/${encodeURIComponent(activeDirectRoom)}`);
+  if (!res.ok) return;
+  const { room, messages } = await res.json();
+  directChatHeader(room);
+  directChatLog.innerHTML = messages.map((m) => {
+    if (m.deleted) return `<p class="${m.side} deleted" data-message-id="${escapeAttr(m.id)}"><span>삭제된 메시지입니다.</span></p>`;
+    if (m.attachment) chatImageSources.set(m.id, { src: m.attachment.dataUrl, name: m.attachment.name });
+    const text = m.message ? `<span>${escapeHtml(m.message)}</span>` : "";
+    const image = m.attachment ? `<button type="button" class="chat-image-link" data-chat-image-id="${escapeAttr(m.id)}"><img class="chat-image" src="${escapeAttr(m.attachment.dataUrl)}" alt="${escapeAttr(m.attachment.name)}"></button>` : "";
+    const action = m.side === "member" ? `<button class="message-more" data-direct-chat-menu="${escapeAttr(m.id)}" aria-label="메시지 옵션">⋯</button><em class="message-actions" data-direct-chat-actions="${escapeAttr(m.id)}"><button type="button" data-direct-chat-delete="${escapeAttr(m.id)}">메시지 삭제</button></em>` : "";
+    const avatar = m.side === "staff" ? `<img class="direct-chat-grade-avatar" src="${escapeAttr(room.peerGradeAsset || "")}" alt="">` : "";
+    return `<p class="${escapeAttr(m.side)}" data-message-id="${escapeAttr(m.id)}">${avatar}<b>${escapeHtml(m.displayName || "회원")}</b>${action}${text}${image}</p>`;
+  }).join("") || directChatEmpty("아직 대화가 없습니다.");
+  directChatLog.scrollTop = directChatLog.scrollHeight;
+  loadDirectRooms();
+}
+
+async function openDirectRoom(roomId) {
+  if (!roomId) return;
+  activeDirectRoom = roomId;
+  directChatWidget?.classList.remove("is-list");
+  directChatBack?.removeAttribute("hidden");
+  if (directChatRooms) directChatRooms.hidden = true;
+  if (directChatLog) directChatLog.hidden = false;
+  if (directChatSend) directChatSend.hidden = false;
+  await loadDirectMessages();
+}
+
+async function openDirectChat(roomId = null) {
+  if (!directChatWidget) return false;
+  closeMemberChat();
+  directChatWidget.classList.add("open");
+  directChatOpen?.classList.add("is-open");
+  directChatOpen?.setAttribute("aria-expanded", "true");
+  if (roomId) {
+    await openDirectRoom(roomId);
+  } else {
+    showDirectRoomList();
+    await loadDirectRooms();
+  }
+  return true;
+}
+
+function toggleDirectChat() {
+  if (directChatWidget?.classList.contains("open")) {
+    closeDirectChat();
+  } else {
+    openDirectChat();
+  }
+}
+
+function updateDirectSendState() {
+  const input = directChatSend?.message;
+  const active = Boolean(input?.value.trim() || selectedDirectAttachment);
+  const sendButton = $(".chat-send-button", directChatSend);
+  const sendImage = $(".chat-send-button img", directChatSend);
+  sendButton?.classList.toggle("active", active);
+  if (sendImage) sendImage.src = active ? "/assets/chat/send-active.png" : "/assets/chat/send-idle.png";
+}
+
+function clearDirectAttachment() {
+  selectedDirectAttachment = null;
+  if (directChatFileInput) directChatFileInput.value = "";
+  if (directChatAttachmentPreview) directChatAttachmentPreview.innerHTML = "";
+  updateDirectSendState();
+}
+
+if (directChatOpen && directChatWidget) {
+  directChatOpen.addEventListener("click", toggleDirectChat);
+  directChatClose?.addEventListener("click", closeDirectChat);
+  directChatBack?.addEventListener("click", async () => {
+    showDirectRoomList();
+    await loadDirectRooms();
+  });
+  directChatRooms?.addEventListener("click", (event) => {
+    const roomButton = event.target.closest("[data-direct-room]");
+    if (roomButton) openDirectRoom(roomButton.dataset.directRoom);
+  });
+  $("#directChatAttach")?.addEventListener("click", () => directChatFileInput?.click());
+  directChatFileInput?.addEventListener("change", () => {
+    const file = directChatFileInput.files?.[0];
+    if (!file) return clearDirectAttachment();
+    if (!file.type.startsWith("image/")) {
+      alert("사진 파일만 첨부할 수 있습니다.");
+      return clearDirectAttachment();
+    }
+    if (file.size > 3 * 1024 * 1024) {
+      alert("사진은 3MB 이하만 첨부할 수 있습니다.");
+      return clearDirectAttachment();
+    }
+    const reader = new FileReader();
+    reader.addEventListener("load", () => {
+      selectedDirectAttachment = { name: file.name, type: file.type, size: file.size, dataUrl: reader.result };
+      if (directChatAttachmentPreview) {
+        directChatAttachmentPreview.innerHTML = `<img src="${escapeAttr(reader.result)}" alt=""><span>${escapeHtml(file.name)}</span><button type="button" aria-label="첨부 삭제">×</button>`;
+        $("button", directChatAttachmentPreview)?.addEventListener("click", clearDirectAttachment);
+      }
+      updateDirectSendState();
+    });
+    reader.readAsDataURL(file);
+  });
+  directChatSend?.message?.addEventListener("input", updateDirectSendState);
+  directChatSend?.message?.addEventListener("keydown", (event) => {
+    if (event.key !== "Enter" || event.isComposing) return;
+    event.preventDefault();
+    directChatSend?.requestSubmit();
+  });
+  directChatSend?.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    if (!activeDirectRoom) return;
+    const input = event.currentTarget.message;
+    if (!input.value.trim() && !selectedDirectAttachment) return;
+    await post(`/api/direct-chat/${encodeURIComponent(activeDirectRoom)}`, { message: input.value, attachment: selectedDirectAttachment });
+    input.value = "";
+    clearDirectAttachment();
+    await loadDirectMessages();
+  });
+  updateDirectSendState();
+  loadDirectRooms();
+  setInterval(() => {
+    if (directChatWidget.classList.contains("open") && activeDirectRoom) loadDirectMessages();
+    else loadDirectRooms();
+  }, 2500);
+}
+
+document.addEventListener("click", async (event) => {
+  const menuButton = event.target.closest("[data-direct-chat-menu]");
+  if (menuButton) {
+    event.preventDefault();
+    const id = menuButton.dataset.directChatMenu;
+    $$("[data-direct-chat-actions]").forEach((item) => item.classList.toggle("open", item.dataset.directChatActions === id && !item.classList.contains("open")));
+    return;
+  }
+  const deleteButton = event.target.closest("[data-direct-chat-delete]");
+  if (deleteButton && activeDirectRoom) {
+    event.preventDefault();
+    await post(`/api/direct-chat/${encodeURIComponent(activeDirectRoom)}/delete-message`, { id: deleteButton.dataset.directChatDelete });
+    await loadDirectMessages();
+    return;
+  }
+  if (!event.target.closest(".message-actions")) {
+    $$("[data-direct-chat-actions]").forEach((item) => item.classList.remove("open"));
+  }
+});
+
 let activeRoom = null;
 async function loadStaffRooms() {
   const list = $("#staffRooms");
@@ -618,9 +900,12 @@ async function loadStaffRooms() {
   if (!res.ok) return;
   const { rooms } = await res.json();
   $("#roomCount").textContent = rooms.reduce((sum, room) => sum + (room.staffUnread || 0), 0);
-  list.innerHTML = rooms.map((room) => `<button class="room-row ${activeRoom === room.id ? "active" : ""}" data-room="${room.id}">
-    <b>${room.memberName || room.username}</b><span>${room.displayGrade} · ${room.internalGrade}</span><em>${room.staffUnread || 0}</em><small>${room.lastMessage || "새 상담"}</small>
-  </button>`).join("") || "<p class='empty'>상담방이 없습니다.</p>";
+  list.innerHTML = rooms.map((room) => {
+    const unread = Number(room.staffUnread || 0);
+    return `<button class="room-row ${activeRoom === room.id ? "active" : ""} ${unread ? "has-unread" : ""}" data-room="${room.id}">
+    <b>${room.memberName || room.username}</b><span>${room.displayGrade} · ${room.internalGrade}</span>${unread ? `<em>${unread}</em>` : ""}<small>${room.lastMessage || "새 상담"}</small>
+  </button>`;
+  }).join("") || "<p class='empty'>상담방이 없습니다.</p>";
 }
 
 async function loadStaffMessages() {

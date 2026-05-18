@@ -22,8 +22,8 @@ let dbWriteQueue = Promise.resolve();
 
 const DISPLAY_GRADES = ["브론즈", "실버", "골드", "플레티넘", "다이아", "마스터", "챌린저"];
 const MEMBER_GRADES = ["브론즈", "실버", "골드", "플레티넘", "다이아"];
-const INTERNAL_GRADES = ["내부등급 1", "내부등급 2", "내부등급 3", "내부등급 4", "내부등급 5"];
-const ROLES = ["MEMBER", "STAFF", "ADMIN", "OWNER"];
+const INTERNAL_GRADES = Array.from({ length: 10 }, (_, index) => `${index + 1}급`);
+const ROLES = ["MEMBER", "STAFF", "OWNER"];
 const DEFAULT_NOTICE_POSTS = [
   { noticeNo: 50, pinned: false, title: "[업데이트 안내] 게임머니·아이템·기타 분할거래 기능 추가", date: "2026-04-30T15:40:00+09:00", body: "안녕하세요.\n\n아이템존입니다.\n\n거래 완료를 기다릴 필요 없이 여러 구매자와 동시에 거래가 가능하도록 분할거래 기능이 개선되었습니다.\n\n[기존]\n분할거래는 최초 신청된 거래가 완료되어야 남은 수량이 재등록됩니다.\n\n[변경]\n1. 거래중 상태에서도 남은 수량 자동 재등록\n- 다수의 거래자와 동시에 거래 가능\n\n2. 프리미엄 글 자동 유지\n- 최초 등록된 분할글이 프리미엄 옵션 글일 경우 남은 수량 재등록 시에도 혜택 유지\n\n앞으로도 편리하고 안전한 거래 환경을 제공하겠습니다.\n\n감사합니다." },
   { noticeNo: 49, pinned: false, title: "[당첨자 안내] 서든어택 이벤트 2", date: "2026-04-02T12:00:00+09:00", body: "서든어택 이벤트 당첨자를 안내드립니다.\n\n마이페이지의 고객센터 문의를 통해 지급 정보를 확인해주세요." },
@@ -149,7 +149,7 @@ async function verifyPassword(password, stored) {
 
 async function readDb() {
   try {
-    const db = JSON.parse(await readFile(DB_PATH, "utf8"));
+    const db = JSON.parse(await retryBusy(() => readFile(DB_PATH, "utf8")));
     const normalized = normalizeDb(db);
     if (normalized.changed) await writeDb(normalized.db);
     return normalized.db;
@@ -171,6 +171,25 @@ function normalizeDb(db) {
   db.site.banners ||= [{ title: "메인 배너", subtitle: "", badge: "" }];
   db.site.posts ||= [];
   db.site.notices ||= [];
+  db.directChatRooms ||= [];
+  db.directChatMessages ||= [];
+  (db.users || []).forEach((user) => {
+    if (user.role === "ADMIN") {
+      user.role = "STAFF";
+      changed = true;
+    }
+    const normalizedGrade = normalizeInternalGrade(user.internalGrade);
+    if (user.internalGrade !== normalizedGrade) {
+      user.internalGrade = normalizedGrade;
+      changed = true;
+    }
+  });
+  (db.pointLedger || []).forEach((row) => {
+    if (["admin_adjust", "rollback"].includes(row.reason) && !row.hiddenFromMember) {
+      row.hiddenFromMember = true;
+      changed = true;
+    }
+  });
   if (seededGames.length && (!db.games?.length || db.games.length < seededGames.length)) {
     db.games = seededGames;
     changed = true;
@@ -315,7 +334,7 @@ async function seedDb() {
         bank: "관리자은행",
         accountNumber: "000-0000-0000",
         displayGrade: "챌린저",
-        internalGrade: "내부등급 1",
+        internalGrade: "1급",
         role: "OWNER",
         status: "정상",
         points: 0,
@@ -349,6 +368,8 @@ async function seedDb() {
     pointLedger: [],
     chatRooms: [],
     chatMessages: [],
+    directChatRooms: [],
+    directChatMessages: [],
     auditLogs: []
   };
   await writeDb(db);
@@ -389,11 +410,11 @@ function send(res, status, payload, headers = {}) {
 }
 
 function canStaff(user) {
-  return user && ["STAFF", "ADMIN", "OWNER"].includes(user.role);
+  return user && ["STAFF", "OWNER"].includes(user.role);
 }
 
 function canAdmin(user) {
-  return user && (["ADMIN", "OWNER"].includes(user.role) || user.displayGrade === "마스터");
+  return user && ["STAFF", "OWNER"].includes(user.role);
 }
 
 function gradeAsset(grade = "브론즈") {
@@ -491,7 +512,7 @@ function sanitizeNoticeHtml(html = "") {
         const style = attrs.match(/\sstyle=(?:"([^"]*)"|'([^']*)')/i);
         const safe = [];
         const text = style?.[1] || style?.[2] || "";
-        const fontSize = text.match(/font-size\s*:\s*(1[2-9]|2[0-8])px/i);
+        const fontSize = text.match(/font-size\s*:\s*(1[0-9]|2[0-9]|3[0-6])px/i);
         const fontWeight = text.match(/font-weight\s*:\s*(400|500|600|700|800|900)/i);
         const fontFamily = text.match(/font-family\s*:\s*([^;"']+)/i);
         if (fontSize) safe.push(`font-size:${fontSize[1]}px`);
@@ -521,6 +542,14 @@ function tradeStatusClass(status = "") {
   return "";
 }
 
+function normalizeInternalGrade(value = "") {
+  const text = String(value || "").trim();
+  const matched = text.match(/(\d+)/);
+  if (!matched) return "1급";
+  const grade = Math.min(10, Math.max(1, Number(matched[1])));
+  return `${grade}급`;
+}
+
 function tradeStatusLabel(status = "", type = "sell") {
   const compact = String(status || "").replace(/\s/g, "");
   if (compact === "판매중" || compact === "구매중") return "";
@@ -536,6 +565,61 @@ function findTradePost(db, type, idValue) {
   const safeType = type === "buy" ? "buy" : "sell";
   const post = tradeCollection(db, safeType).find((item) => item.id === idValue);
   return post ? { post, type: safeType } : null;
+}
+
+function directChatPost(db, room) {
+  const found = findTradePost(db, room.tradeType, room.postId);
+  return found?.post || null;
+}
+
+function directChatMeta(db, room, user) {
+  const peerId = (room.participantIds || []).find((idValue) => idValue !== user.id);
+  const peer = db.users?.find((item) => item.id === peerId);
+  const post = directChatPost(db, room);
+  return {
+    id: room.id,
+    tradeType: room.tradeType,
+    postId: room.postId,
+    tradeTitle: post?.title || room.tradeTitle || "거래글",
+    peerId,
+    peerNickname: peer?.nickname || "회원",
+    peerGrade: peer?.displayGrade || "브론즈",
+    peerGradeAsset: gradeAsset(peer?.displayGrade || "브론즈"),
+    lastMessage: room.lastMessage || "",
+    lastAt: room.lastAt || room.createdAt,
+    unread: Number(room.unreadBy?.[user.id] || 0)
+  };
+}
+
+function findDirectRoom(db, roomId, user) {
+  const room = (db.directChatRooms || []).find((item) => item.id === roomId && (item.participantIds || []).includes(user.id));
+  return room || null;
+}
+
+function ensureDirectRoom(db, user, type, postId) {
+  const found = findTradePost(db, type, postId);
+  if (!found) return null;
+  const { post } = found;
+  if (post.userId === user.id) return { error: "내가 등록한 글에서는 상대방이 채팅을 시작하면 목록에서 확인할 수 있습니다." };
+  const participantIds = [post.userId, user.id].sort();
+  let room = (db.directChatRooms || []).find((item) => item.tradeType === found.type && item.postId === post.id && participantIds.every((idValue) => (item.participantIds || []).includes(idValue)));
+  if (!room) {
+    room = {
+      id: id("direct"),
+      tradeType: found.type,
+      postId: post.id,
+      tradeTitle: post.title || "거래글",
+      ownerId: post.userId,
+      starterId: user.id,
+      participantIds,
+      unreadBy: Object.fromEntries(participantIds.map((idValue) => [idValue, 0])),
+      lastMessage: "",
+      lastAt: now(),
+      createdAt: now()
+    };
+    db.directChatRooms.push(room);
+  }
+  return { room };
 }
 
 function allTrades(db) {
@@ -681,7 +765,7 @@ function legacyTradeComposePage(user, type, db, selectedSlug = "") {
         <div class="compose-field">
           <b>가격</b>
           <div class="price-entry"><input name="price" type="number" min="0" step="1000" placeholder="${sell ? "판매 가격" : "희망 가격"}" required><span>원</span></div>
-          <div class="price-presets"><button type="button" data-price-preset="1000000">100만원</button><button type="button" data-price-preset="2000000">200만원</button><button type="button" data-price-preset="5000000">500만원</button><button type="button" data-price-preset="10000000">1000만원</button></div>
+          <div class="price-presets"><button type="button" data-price-preset="50000">+5만원</button><button type="button" data-price-preset="100000">+10만원</button><button type="button" data-price-preset="500000">+50만원</button></div>
         </div>
         <div class="compose-field">
           <b>캐릭터/수량</b>
@@ -760,7 +844,7 @@ function tradeComposePage(user, type, db, selectedSlug = "") {
         <div class="compose-field compose-field--price">
           <b>가격</b>
           <div class="price-entry"><input name="price" type="number" min="0" step="1000" placeholder="${sell ? "판매 가격" : "희망 가격"}" required><span>원</span></div>
-          <div class="price-presets"><button type="button" data-price-preset="1000000">100만원</button><button type="button" data-price-preset="2000000">200만원</button><button type="button" data-price-preset="5000000">500만원</button><button type="button" data-price-preset="10000000">1000만원</button></div>
+          <div class="price-presets"><button type="button" data-price-preset="50000">+5만원</button><button type="button" data-price-preset="100000">+10만원</button><button type="button" data-price-preset="500000">+50만원</button></div>
         </div>
         <div class="compose-field compose-field--quantity">
           <b>캐릭터/수량</b>
@@ -774,8 +858,8 @@ function tradeComposePage(user, type, db, selectedSlug = "") {
           <b>내용</b>
           <div class="trade-editor-wrap">
             <div class="notice-editor-toolbar trade-editor-toolbar">
-              <select data-trade-font><option value="Malgun Gothic">맑은 고딕</option><option value="serif">명조</option><option value="monospace">고정폭</option></select>
-              <select data-trade-size><option>14</option><option selected>16</option><option>18</option><option>20</option><option>24</option></select>
+              <select data-trade-font><option value="Malgun Gothic">맑은 고딕</option><option value="Noto Sans KR">본고딕</option><option value="Apple SD Gothic Neo">애플고딕</option><option value="Arial">Arial</option><option value="Tahoma">Tahoma</option><option value="Georgia">Georgia</option><option value="serif">명조</option><option value="sans-serif">고딕 계열</option><option value="monospace">고정폭</option></select>
+              <select data-trade-size><option>10</option><option>12</option><option>14</option><option selected>16</option><option>18</option><option>20</option><option>22</option><option>24</option><option>28</option><option>32</option><option>36</option></select>
               <select data-trade-weight><option value="400">보통</option><option value="700">굵게</option><option value="900">아주 굵게</option></select>
               <button type="button" data-trade-apply>선택 텍스트 적용</button>
               <button type="button" data-trade-image>사진첨부</button>
@@ -862,7 +946,7 @@ function tradeDetailPage(user, db, type, postId) {
           <div><dt>내 마일리지</dt><dd>${user ? won(user.points) : "로그인 필요"}</dd></div>
         </dl>
         <div class="trade-detail-buttons">
-          <button type="button" class="trade-detail-chat" data-open-chat>채팅</button>
+          ${!user ? `<a class="trade-detail-chat" href="/login">채팅</a>` : !isOwner ? `<button type="button" class="trade-detail-chat" data-direct-chat-start="${type}" data-trade-id="${esc(post.id)}">채팅</button>` : `<button type="button" class="trade-detail-chat" disabled>채팅</button>`}
           ${canStart ? `<button type="button" class="trade-detail-request" data-trade-action="${type}" data-trade-id="${esc(post.id)}">${actionLabel}</button>` : ""}
           ${canComplete ? `<button type="button" class="trade-detail-request" data-trade-complete="${type}" data-trade-id="${esc(post.id)}">${completeLabel}</button>` : ""}
           ${!user && !displayStatus ? `<a class="trade-detail-request" href="/login">${actionLabel}</a>` : ""}
@@ -908,10 +992,6 @@ function header(user) {
     <div class="top-inner">
       <a class="brand" href="/" aria-label="아이템존 홈"><img src="/assets/logo/itemzone-logo.png" alt="아이템존"></a>
       <form class="search">
-        <div class="deal-toggle" aria-label="거래 유형">
-          <label><input type="radio" name="deal" checked><span>팝니다</span></label>
-          <label><input type="radio" name="deal"><span>삽니다</span></label>
-        </div>
         <div class="search-field">
           <input id="globalSearch" placeholder="게임명 또는 물품명을 검색하세요" autocomplete="off">
           <div class="suggest-panel" id="globalSuggest" aria-label="추천 검색어"></div>
@@ -974,15 +1054,21 @@ function homePage(user, db) {
   const notices = noticePosts(db).filter((post) => !post.pinned).slice(0, 5).map((post) => `<li><a href="/notices/${encodeURIComponent(post.id)}">${esc(post.title)}</a></li>`).join("");
   const points = Number(user?.points || 0).toLocaleString();
   const displayGrade = user?.displayGrade || "브론즈";
+  const userSellOpenCount = user ? (db.sellPosts || []).filter((post) => post.userId === user.id && String(post.status || "판매중").replace(/\s/g, "") === "판매중").length : 0;
+  const userBuyOpenCount = user ? (db.buyPosts || []).filter((post) => post.userId === user.id && String(post.status || "구매중").replace(/\s/g, "") === "구매중").length : 0;
+  const userWaitingCount = user ? [
+    ...(db.sellPosts || []),
+    ...(db.buyPosts || [])
+  ].filter((post) => post.userId === user.id && String(post.status || "").includes("진행중")).length : 0;
   const quickPanel = user ? `<div class="member-summary">
           <div class="member-tier">
             <img class="tier-badge" src="${gradeAsset(displayGrade)}" alt="${displayGrade}">
             <div class="member-grade-row"><strong>${displayGrade} 등급</strong><b>${user.nickname}</b></div>
           </div>
           <p><span>마일리지</span><b class="blue">${points}원</b></p>
-          <p><span>판매중</span><b class="blue">0개</b></p>
-          <p><span>구매중</span><b class="green">0개</b></p>
-          <p><span>구매대기</span><b class="orange">0개</b></p>
+          <a class="summary-count-row" href="/mypage"><span>판매중</span><b class="blue">${userSellOpenCount.toLocaleString()}개</b></a>
+          <a class="summary-count-row" href="/mypage"><span>구매중</span><b class="green">${userBuyOpenCount.toLocaleString()}개</b></a>
+          <a class="summary-count-row" href="/mypage"><span>판매/구매대기</span><b class="orange">${userWaitingCount.toLocaleString()}개</b></a>
         </div>
         <nav class="quick-actions">
           <a href="/charge"><img src="/assets/quick/point-charge.png" alt=""><span>충전</span></a>
@@ -1198,7 +1284,7 @@ function registerPage(user, type, db, selectedSlug = "") {
 function pointPage(user, db, type) {
   const charge = type === "charge";
   const balance = Number(user?.points || 0);
-  const presets = charge ? [["10000", "+1만"], ["50000", "+5만"], ["100000", "+10만"], ["1000000", "+100만"]] : [["50000", "5만"], ["100000", "10만"], ["1000000", "100만"], [String(balance), "전액"]];
+  const presets = [["50000", "+5만"], ["100000", "+10만"], ["500000", "+50만"]];
   return layout(charge ? "마일리지충전" : "마일리지출금", user, `<main class="mileage-page ${charge ? "charge-page" : "withdraw-page"}">
     <section class="mileage-info-panel">
       <h1>${charge ? "충전전용계좌" : "본인 계좌 출금"}</h1>
@@ -1245,8 +1331,8 @@ function pointPage(user, db, type) {
 function myPage(user, db) {
   const sellPosts = (db.sellPosts || []).filter((post) => post.userId === user.id).map((post) => ({ ...post, type: "sell" }));
   const buyPosts = (db.buyPosts || []).filter((post) => post.userId === user.id).map((post) => ({ ...post, type: "buy" }));
-  const requests = db.pointRequests.filter((r) => r.userId === user.id).slice().reverse();
-  const ledger = db.pointLedger.filter((r) => r.userId === user.id).slice().reverse();
+  const requests = db.pointRequests.filter((r) => r.userId === user.id && !r.hiddenFromMember && String(r.status || "") !== "삭제" && String(r.status || "") !== "롤백").slice().reverse();
+  const ledger = db.pointLedger.filter((r) => r.userId === user.id && !r.hiddenFromMember && !["admin_adjust", "rollback"].includes(r.reason)).slice().reverse();
   const displayGrade = user.displayGrade || "브론즈";
   const formatDateTime = (value) => new Date(value).toLocaleString("sv-SE", { timeZone: "Asia/Seoul" }).slice(0, 16);
   const requestStatus = (status = "") => {
@@ -1255,9 +1341,8 @@ function myPage(user, db) {
     return "진행중";
   };
   const tradeStatus = (post) => {
-    if (post.status?.includes("완료")) return post.type === "sell" ? "판매완료" : "구매완료";
     if (post.status?.includes("숨김") || post.status?.includes("취소")) return "취소";
-    return "진행중";
+    return tradeStatusLabel(post.status, post.type);
   };
   const tradeRows = (posts, emptyText) => {
     const rows = posts.slice().sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt))).map((post) => {
@@ -1266,7 +1351,7 @@ function myPage(user, db) {
         <span class="mypage-trade-title">${esc(post.title || "제목 없음")}</span>
         <small>${esc(post.gameName || post.game || "게임")} · ${esc(post.server || "서버전체")}</small>
         <b>${won(post.price)}</b>
-        <em class="${status === "진행중" ? "active" : status === "취소" ? "cancel" : "done"}">[${status}]</em>
+        ${status ? `<em class="${status.includes("진행") ? "active" : status === "취소" ? "cancel" : "done"}">[${status}]</em>` : ""}
       </a>`;
     }).join("");
     return rows || `<p class="mypage-empty">${emptyText}</p>`;
@@ -1305,19 +1390,41 @@ function myPage(user, db) {
 }
 
 function adminPage(user, db) {
-  const users = db.users.map((u) => `<tr><td>${u.username}</td><td>${u.nickname}</td><td>${u.phone}</td><td>${u.bank} ${u.accountNumber}</td><td>${u.role}</td><td>${u.displayGrade}</td><td>${u.internalGrade}</td><td>${u.points}</td><td><button data-admin-user="${u.id}">수정</button></td></tr>`).join("");
+  const editCell = (name, value, type = "text") => `<div class="admin-edit-field" data-admin-field="${name}"><span>${esc(value || "-")}</span><input name="${name}" type="${type}" value="${esc(value || "")}" hidden><button type="button" data-admin-edit="${name}">수정</button></div>`;
+  const passwordCell = () => `<div class="admin-edit-field password" data-admin-field="password"><span>변경 전용</span><input name="password" type="password" value="" placeholder="새 비밀번호" hidden><button type="button" data-admin-edit="password">수정</button></div>`;
+  const selectCell = (name, value, options) => `<div class="admin-edit-field" data-admin-field="${name}"><span>${esc(value || "-")}</span><select name="${name}" hidden>${options.map((option) => `<option value="${esc(option)}" ${option === value ? "selected" : ""}>${esc(option)}</option>`).join("")}</select><button type="button" data-admin-edit="${name}">수정</button></div>`;
+  const accountCell = (u) => `<div class="admin-edit-field account" data-admin-field="account"><span>${esc(`${u.bank || "-"} ${u.accountNumber || ""}`.trim())}</span><div class="admin-account-inputs" hidden><input name="bank" value="${esc(u.bank || "")}" placeholder="은행"><input name="accountNumber" value="${esc(u.accountNumber || "")}" placeholder="계좌번호"></div><button type="button" data-admin-edit="account">수정</button></div>`;
+  const roleOptions = user.role === "OWNER" ? ROLES : ROLES.filter((role) => role !== "OWNER");
+  const users = db.users.map((u) => `<tr data-admin-user-row="${esc(u.id)}">
+    <td>${editCell("username", u.username)}</td>
+    <td>${passwordCell()}</td>
+    <td>${editCell("nickname", u.nickname)}</td>
+    <td>${editCell("phone", u.phone)}</td>
+    <td>${accountCell(u)}</td>
+    <td>${selectCell("role", u.role, roleOptions.includes(u.role) ? roleOptions : [u.role, ...roleOptions])}</td>
+    <td>${selectCell("displayGrade", u.displayGrade, DISPLAY_GRADES)}</td>
+    <td>${selectCell("internalGrade", normalizeInternalGrade(u.internalGrade), INTERNAL_GRADES)}</td>
+    <td>${editCell("points", Number(u.points || 0), "number")}</td>
+    <td><button type="button" class="admin-row-save" data-admin-user-save="${esc(u.id)}">저장</button></td>
+  </tr>`).join("");
   const reqs = db.pointRequests.slice().reverse().map((r) => {
     const member = db.users.find((u) => u.id === r.userId);
-    return `<tr><td>${r.type === "charge" ? "충전" : "출금"}</td><td>${member?.nickname || "-"}</td><td>${Number(r.amount).toLocaleString()}</td><td>${r.status}</td><td><button data-point="${r.id}" data-decision="approved">완료처리</button><button data-point="${r.id}" data-decision="rejected">취소</button></td></tr>`;
+    const status = String(r.status || "대기");
+    const isPending = status === "대기";
+    const isApproved = ["approved", "승인", "완료", "처리완료"].includes(status);
+    const actions = isPending
+      ? `<button data-point="${r.id}" data-decision="approved">완료처리</button><button data-point="${r.id}" data-decision="rejected">취소</button><button data-point="${r.id}" data-decision="deleted">삭제</button>`
+      : isApproved
+        ? `<button data-point="${r.id}" data-decision="rollback">롤백</button><button data-point="${r.id}" data-decision="deleted">삭제</button>`
+        : `<button data-point="${r.id}" data-decision="deleted">삭제</button>`;
+    return `<tr><td>${r.type === "charge" ? "충전" : "출금"}</td><td>${member?.nickname || "-"}</td><td>${Number(r.amount).toLocaleString()}</td><td>${esc(status)}</td><td>${actions}</td></tr>`;
   }).join("");
   const latestNotices = noticePosts(db).slice(0, 6).map((post) => `<li><a href="/notices/${encodeURIComponent(post.id)}">${post.pinned ? "[상단고정] " : ""}${esc(post.title)}</a><span>${noticeDate(post.createdAt)}</span></li>`).join("");
   const noticeInputDate = new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 16);
   return layout("관리자", user, `<main class="admin-page">
     <h1>운영 관리자</h1>
     <section class="admin-grid">
-      <form class="panel" data-form="site"><h2>광고/계좌</h2>
-        <input name="bannerTitle" value="${db.site.banners[0].title}" placeholder="배너 제목">
-        <input name="bannerSubtitle" value="${db.site.banners[0].subtitle}" placeholder="배너 문구">
+      <form class="panel account-admin-form" data-form="site"><h2>계좌번호 등록</h2>
         <input name="bank" value="${db.site.chargeAccount.bank}" placeholder="은행">
         <input name="holder" value="${db.site.chargeAccount.holder}" placeholder="예금주">
         <input name="number" value="${db.site.chargeAccount.number}" placeholder="계좌번호">
@@ -1325,7 +1432,7 @@ function adminPage(user, db) {
       </form>
       <form class="panel" data-form="staff"><h2>운영진 계정 생성</h2>
         <input name="username" placeholder="아이디"><input name="password" type="password" placeholder="비밀번호"><input name="nickname" placeholder="닉네임">
-        <select name="role"><option>STAFF</option><option>ADMIN</option></select><button>생성</button><p class="form-message"></p>
+        <select name="role"><option>STAFF</option></select><button>생성</button><p class="form-message"></p>
       </form>
     </section>
     <section class="panel admin-notice-panel">
@@ -1348,7 +1455,7 @@ function adminPage(user, db) {
       </form>
       <ul class="admin-notice-list">${latestNotices}</ul>
     </section>
-    <section class="panel table-panel"><h2>회원 개인정보/등급 관리</h2><table><thead><tr><th>ID</th><th>닉네임</th><th>전화</th><th>계좌</th><th>권한</th><th>표시등급</th><th>내부등급</th><th>마일리지</th><th></th></tr></thead><tbody>${users}</tbody></table></section>
+    <section class="panel table-panel"><h2>회원 개인정보/등급 관리</h2><table><thead><tr><th>ID</th><th>비밀번호</th><th>닉네임</th><th>전화</th><th>계좌</th><th>권한</th><th>표시등급</th><th>내부등급</th><th>마일리지</th><th></th></tr></thead><tbody>${users}</tbody></table></section>
     <section class="panel table-panel"><h2>충전/출금 신청</h2><table><tbody>${reqs || "<tr><td>신청 내역이 없습니다.</td></tr>"}</tbody></table></section>
   </main>`, "admin");
 }
@@ -1394,7 +1501,7 @@ function noticesPage(user, db, page = 1) {
 function noticeDetailPage(user, db, postId) {
   const post = (db.site?.posts || []).find((item) => item.id === postId);
   if (!post) return layout("공지사항", user, `<main class="notice-page"><h1>공지사항</h1><section class="notice-detail-card"><p>공지사항을 찾을 수 없습니다.</p></section><a class="notice-list-button" href="/notices">목록</a>${chatWidget(user)}</main>`, "notice");
-  const canDelete = user && ["ADMIN", "OWNER"].includes(user.role);
+  const canDelete = canAdmin(user);
   return layout(post.title, user, `<main class="notice-page">
     <h1><a href="/notices">공지사항</a></h1>
     <article class="notice-detail-card">
@@ -1411,8 +1518,27 @@ function noticeDetailPage(user, db, postId) {
 }
 
 function chatWidget(user) {
-  if (!user) return `<a class="chat-fab locked" href="/login" aria-label="상담사연결"><img src="/assets/icons/chat-support.png" alt=""></a>`;
-  return `<button class="chat-fab" id="chatOpen" aria-label="상담사연결" aria-expanded="false"><img src="/assets/icons/chat-support.png" alt=""><span>×</span></button>
+  if (!user) return `<a class="direct-chat-fab locked" href="/login" aria-label="개인채팅"><img class="direct-chat-icon direct-chat-icon-green" src="/assets/chat/direct-chat-green.png" alt=""></a><a class="chat-fab locked" href="/login" aria-label="상담사연결"><img class="support-icon-blue" src="/assets/icons/chat-support.png" alt=""></a>`;
+  return `<button class="direct-chat-fab" id="directChatOpen" aria-label="개인채팅" aria-expanded="false"><img class="direct-chat-icon direct-chat-icon-green" src="/assets/chat/direct-chat-green.png" alt=""><img class="direct-chat-icon direct-chat-icon-red" src="/assets/chat/direct-chat-red.png" alt=""><em>×</em></button>
+  <section class="direct-chat-widget" id="directChatWidget" aria-label="개인 채팅">
+    <header class="direct-chat-head">
+      <button type="button" id="directChatBack" class="direct-chat-back" aria-label="채팅방 목록">‹</button>
+      <div id="directChatTitle"><b>채팅</b></div>
+      <button type="button" id="directChatClose" class="direct-chat-close" aria-label="닫기">×</button>
+    </header>
+    <div id="directChatRooms" class="direct-chat-rooms"></div>
+    <div id="directChatLog" class="chat-log member-chat-log direct-chat-log" hidden></div>
+    <form id="directChatSend" class="member-chat-send direct-chat-send" hidden>
+      <input id="directChatFileInput" type="file" accept="image/*" hidden>
+      <div class="chat-composer">
+        <input name="message" placeholder="메시지를 입력해주세요." autocomplete="off">
+        <div class="chat-tools"><button type="button" id="directChatAttach" aria-label="파일첨부">📎</button></div>
+        <div id="directChatAttachmentPreview" class="chat-attachment-preview"></div>
+        <button class="chat-send-button" type="submit" aria-label="전송"><img src="/assets/chat/send-idle.png" alt=""></button>
+      </div>
+    </form>
+  </section>
+  <button class="chat-fab" id="chatOpen" aria-label="상담사연결" aria-expanded="false"><img class="support-icon-blue" src="/assets/icons/chat-support.png" alt=""><img class="support-icon-red" src="/assets/icons/chat-support-red.png" alt=""><span>×</span></button>
   <section class="chat-widget" id="chatWidget" aria-label="아이템존 고객센터">
     <header class="member-chat-head">
       <button type="button" class="chat-back" aria-label="뒤로">‹</button>
@@ -1464,7 +1590,7 @@ async function api(req, res, db, user, pathname) {
       if (password !== passwordConfirm) return send(res, 400, { error: "패스워드 재확인이 일치하지 않습니다." });
       if (db.users.some((u) => String(u.username || "").toLowerCase() === username.toLowerCase())) return send(res, 409, { error: "이미 사용 중인 아이디입니다." });
       if (db.users.some((u) => String(u.nickname || "").toLowerCase() === nickname.toLowerCase())) return send(res, 409, { error: "이미 사용 중인 닉네임입니다." });
-      const newUser = { id: id("user"), username, passwordHash: await hashPassword(password), nickname, phone, phoneCarrier: data.phoneCarrier, bank: "-", accountNumber: "-", displayGrade: "브론즈", internalGrade: "내부등급 1", role: "MEMBER", status: "정상", points: 0, createdAt: now() };
+      const newUser = { id: id("user"), username, passwordHash: await hashPassword(password), nickname, phone, phoneCarrier: data.phoneCarrier, bank: "-", accountNumber: "-", displayGrade: "브론즈", internalGrade: "1급", role: "MEMBER", status: "정상", points: 0, createdAt: now() };
       db.users.push(newUser); await writeDb(db);
       return send(res, 200, { ok: true }, { "Set-Cookie": sessionCookie(newUser.id) });
     }
@@ -1549,9 +1675,9 @@ async function api(req, res, db, user, pathname) {
     if (pathname === "/api/admin/site" && req.method === "POST") {
       if (!protect(user, "admin")) return send(res, 403, { error: "권한이 없습니다." });
       const data = await body(req);
-      db.site.banners[0].title = data.bannerTitle || db.site.banners[0].title;
-      db.site.banners[0].subtitle = data.bannerSubtitle || db.site.banners[0].subtitle;
-      db.site.chargeAccount = { bank: data.bank, holder: data.holder, number: data.number };
+      if (data.bannerTitle) db.site.banners[0].title = data.bannerTitle;
+      if (data.bannerSubtitle) db.site.banners[0].subtitle = data.bannerSubtitle;
+      db.site.chargeAccount = { bank: String(data.bank || "").trim(), holder: String(data.holder || "").trim(), number: String(data.number || "").trim() };
       if (data.postTitle) db.site.posts.push({ id: id("post"), title: data.postTitle, body: data.postBody || "", displayName: data.displayName || user.nickname, authorId: user.id, createdAt: now() });
       audit(db, user, "SITE_UPDATE"); await writeDb(db); return send(res, 200, { ok: true });
     }
@@ -1580,7 +1706,7 @@ async function api(req, res, db, user, pathname) {
       return send(res, 200, { ok: true });
     }
     if (pathname === "/api/admin/notice/delete" && req.method === "POST") {
-      if (!user || !["ADMIN", "OWNER"].includes(user.role)) return send(res, 403, { error: "권한이 없습니다." });
+      if (!canAdmin(user)) return send(res, 403, { error: "권한이 없습니다." });
       const data = await body(req);
       const before = db.site.posts.length;
       db.site.posts = db.site.posts.filter((post) => post.id !== data.id);
@@ -1592,7 +1718,7 @@ async function api(req, res, db, user, pathname) {
     if (pathname === "/api/admin/staff" && req.method === "POST") {
       if (user?.role !== "OWNER") return send(res, 403, { error: "챌린저 계정만 운영진을 생성할 수 있습니다." });
       const data = await body(req);
-      db.users.push({ id: id("user"), username: data.username, passwordHash: await hashPassword(data.password), nickname: data.nickname, phone: "-", bank: "-", accountNumber: "-", displayGrade: "마스터", internalGrade: "내부등급 1", role: ROLES.includes(data.role) ? data.role : "STAFF", status: "정상", points: 0, createdAt: now() });
+      db.users.push({ id: id("user"), username: data.username, passwordHash: await hashPassword(data.password), nickname: data.nickname, phone: "-", bank: "-", accountNumber: "-", displayGrade: "마스터", internalGrade: "1급", role: ROLES.includes(data.role) ? data.role : "STAFF", status: "정상", points: 0, createdAt: now() });
       audit(db, user, "STAFF_CREATE"); await writeDb(db); return send(res, 200, { ok: true });
     }
     if (pathname === "/api/admin/user" && req.method === "POST") {
@@ -1600,8 +1726,34 @@ async function api(req, res, db, user, pathname) {
       const data = await body(req);
       const target = db.users.find((u) => u.id === data.id);
       if (!target) return send(res, 404, { error: "회원을 찾을 수 없습니다." });
-      if (MEMBER_GRADES.includes(data.displayGrade) || (target.role !== "MEMBER" && data.displayGrade === "마스터") || (user.role === "OWNER" && data.displayGrade === "챌린저")) target.displayGrade = data.displayGrade;
-      if (INTERNAL_GRADES.includes(data.internalGrade)) target.internalGrade = data.internalGrade;
+      const username = String(data.username || "").trim();
+      const nickname = String(data.nickname || "").trim();
+      if (!username || !nickname) return send(res, 400, { error: "아이디와 닉네임을 확인하세요." });
+      if (db.users.some((item) => item.id !== target.id && String(item.username || "").toLowerCase() === username.toLowerCase())) return send(res, 409, { error: "이미 사용 중인 아이디입니다." });
+      if (db.users.some((item) => item.id !== target.id && String(item.nickname || "").toLowerCase() === nickname.toLowerCase())) return send(res, 409, { error: "이미 사용 중인 닉네임입니다." });
+      target.username = username;
+      target.nickname = nickname;
+      const nextPassword = String(data.password || "").trim();
+      if (nextPassword) {
+        if (!/^(?=.*[a-z])(?=.*\d)[a-z\d]{8,}$/.test(nextPassword)) return send(res, 400, { error: "비밀번호는 8자 이상, 영문 소문자와 숫자를 조합해주세요." });
+        target.passwordHash = await hashPassword(nextPassword);
+      }
+      target.phone = String(data.phone || "").trim();
+      target.bank = String(data.bank || "").trim();
+      target.accountNumber = String(data.accountNumber || "").trim();
+      if (ROLES.includes(data.role)) {
+        if (data.role === "OWNER" && user.role !== "OWNER") return send(res, 403, { error: "오너 권한은 오너만 지정할 수 있습니다." });
+        target.role = data.role;
+      }
+      if (DISPLAY_GRADES.includes(data.displayGrade)) target.displayGrade = data.displayGrade;
+      const nextInternalGrade = normalizeInternalGrade(data.internalGrade);
+      if (INTERNAL_GRADES.includes(nextInternalGrade)) target.internalGrade = nextInternalGrade;
+      const nextPoints = Math.max(0, Math.floor(Number(data.points || 0)));
+      if (Number.isFinite(nextPoints) && nextPoints !== Number(target.points || 0)) {
+        const before = Number(target.points || 0);
+        target.points = nextPoints;
+        db.pointLedger.push({ id: id("ledger"), userId: target.id, amount: nextPoints - before, reason: "admin_adjust", staffId: user.id, hiddenFromMember: true, createdAt: now() });
+      }
       if (["정상", "정지"].includes(data.status)) target.status = data.status;
       audit(db, user, "USER_UPDATE", target.id); await writeDb(db); return send(res, 200, { ok: true });
     }
@@ -1609,15 +1761,116 @@ async function api(req, res, db, user, pathname) {
       if (!protect(user, "admin")) return send(res, 403, { error: "권한이 없습니다." });
       const data = await body(req);
       const request = db.pointRequests.find((r) => r.id === data.id);
-      if (!request || request.status !== "대기") return send(res, 404, { error: "처리할 신청이 없습니다." });
-      request.status = data.decision === "approved" ? "승인" : "거절";
-      request.handledBy = user.id; request.handledAt = now();
+      if (!request) return send(res, 404, { error: "처리할 신청이 없습니다." });
       const member = db.users.find((u) => u.id === request.userId);
-      if (member && request.status === "승인") {
-        member.points += request.type === "charge" ? request.amount : -request.amount;
-        db.pointLedger.push({ id: id("ledger"), userId: member.id, amount: request.type === "charge" ? request.amount : -request.amount, reason: request.type, staffId: user.id, createdAt: now() });
+      const status = String(request.status || "대기");
+      const amount = Number(request.amount || 0);
+      const signedAmount = request.type === "charge" ? amount : -amount;
+      const linkedPointLedger = (row) => row.requestId === request.id || (!row.requestId && row.userId === request.userId && row.reason === request.type && Number(row.amount || 0) === signedAmount && (!request.handledAt || Math.abs(new Date(row.createdAt).getTime() - new Date(request.handledAt).getTime()) < 30000));
+      if (data.decision === "approved") {
+        if (status !== "대기") return send(res, 400, { error: "대기 상태만 완료처리할 수 있습니다." });
+        request.status = "승인";
+        request.handledBy = user.id; request.handledAt = now();
+        if (member) {
+          member.points = Number(member.points || 0) + signedAmount;
+          db.pointLedger.push({ id: id("ledger"), requestId: request.id, userId: member.id, amount: signedAmount, reason: request.type, staffId: user.id, createdAt: now() });
+        }
+      } else if (data.decision === "rejected") {
+        if (status !== "대기") return send(res, 400, { error: "대기 상태만 취소할 수 있습니다." });
+        request.status = "거절";
+        request.handledBy = user.id; request.handledAt = now();
+      } else if (data.decision === "rollback") {
+        if (!["approved", "승인", "완료", "처리완료"].includes(status)) return send(res, 400, { error: "완료된 요청만 롤백할 수 있습니다." });
+        request.status = "롤백";
+        request.hiddenFromMember = true;
+        request.rolledBackBy = user.id; request.rolledBackAt = now();
+        if (member) {
+          member.points = Math.max(0, Number(member.points || 0) - signedAmount);
+          db.pointLedger.forEach((row) => {
+            if (linkedPointLedger(row)) row.hiddenFromMember = true;
+          });
+          db.pointLedger.push({ id: id("ledger"), requestId: request.id, userId: member.id, amount: -signedAmount, reason: "rollback", staffId: user.id, hiddenFromMember: true, createdAt: now() });
+        }
+      } else if (data.decision === "deleted") {
+        request.status = "삭제";
+        request.hiddenFromMember = true;
+        request.deletedBy = user.id; request.deletedAt = now();
+        db.pointLedger.forEach((row) => {
+          if (linkedPointLedger(row)) row.hiddenFromMember = true;
+        });
+      } else {
+        return send(res, 400, { error: "처리 값을 확인하세요." });
       }
       audit(db, user, "POINT_HANDLE", request.id); await writeDb(db); return send(res, 200, { ok: true });
+    }
+    if (pathname === "/api/direct-chat/start" && req.method === "POST") {
+      if (!protect(user, "member")) return send(res, 401, { error: "로그인이 필요합니다." });
+      const data = await body(req);
+      const result = ensureDirectRoom(db, user, data.type, data.id);
+      if (!result) return send(res, 404, { error: "거래글을 찾을 수 없습니다." });
+      if (result.error) return send(res, 403, { error: result.error });
+      await writeDb(db);
+      return send(res, 200, { ok: true, room: directChatMeta(db, result.room, user) });
+    }
+    if (pathname === "/api/direct-chat/rooms" && req.method === "GET") {
+      if (!protect(user, "member")) return send(res, 401, { error: "로그인이 필요합니다." });
+      const rooms = (db.directChatRooms || [])
+        .filter((room) => (room.participantIds || []).includes(user.id))
+        .map((room) => directChatMeta(db, room, user))
+        .sort((a, b) => String(b.lastAt || "").localeCompare(String(a.lastAt || "")));
+      return send(res, 200, { rooms });
+    }
+    if (pathname.startsWith("/api/direct-chat/") && pathname.endsWith("/delete-message") && req.method === "POST") {
+      if (!protect(user, "member")) return send(res, 401, { error: "로그인이 필요합니다." });
+      const roomId = pathname.split("/").at(-2);
+      const room = findDirectRoom(db, roomId, user);
+      if (!room) return send(res, 404, { error: "채팅방을 찾을 수 없습니다." });
+      const data = await body(req);
+      const message = (db.directChatMessages || []).find((item) => item.id === data.id && item.roomId === room.id && item.senderId === user.id);
+      if (!message) return send(res, 404, { error: "삭제할 메시지가 없습니다." });
+      message.deleted = true;
+      message.deletedAt = now();
+      const visibleMessages = (db.directChatMessages || []).filter((item) => item.roomId === room.id && !item.deleted);
+      const latest = visibleMessages.at(-1);
+      room.lastMessage = latest ? latest.message || (latest.attachment ? `첨부파일: ${latest.attachment.name}` : "") : "";
+      room.lastAt = latest?.createdAt || now();
+      await writeDb(db);
+      return send(res, 200, { ok: true });
+    }
+    if (pathname.startsWith("/api/direct-chat/") && req.method === "GET") {
+      if (!protect(user, "member")) return send(res, 401, { error: "로그인이 필요합니다." });
+      const roomId = pathname.split("/").pop();
+      const room = findDirectRoom(db, roomId, user);
+      if (!room) return send(res, 404, { error: "채팅방을 찾을 수 없습니다." });
+      room.unreadBy ||= {};
+      let changed = Number(room.unreadBy[user.id] || 0) !== 0;
+      room.unreadBy[user.id] = 0;
+      (db.directChatMessages || []).forEach((message) => {
+        if (message.roomId === room.id && message.senderId !== user.id) {
+          message.readBy ||= [];
+          if (!message.readBy.includes(user.id)) {
+            message.readBy.push(user.id);
+            changed = true;
+          }
+        }
+      });
+      if (changed) await writeDb(db);
+      return send(res, 200, { room: directChatMeta(db, room, user), messages: directMessages(db, room, user) });
+    }
+    if (pathname.startsWith("/api/direct-chat/") && req.method === "POST") {
+      if (!protect(user, "member")) return send(res, 401, { error: "로그인이 필요합니다." });
+      const roomId = pathname.split("/").pop();
+      const room = findDirectRoom(db, roomId, user);
+      if (!room) return send(res, 404, { error: "채팅방을 찾을 수 없습니다." });
+      const data = await body(req);
+      addDirectMessage(db, room, user, data.message, data.attachment);
+      await writeDb(db);
+      return send(res, 200, { ok: true });
+    }
+    if (pathname === "/api/chat/member/unread" && req.method === "GET") {
+      if (!protect(user, "member")) return send(res, 401, { error: "로그인이 필요합니다." });
+      const room = (db.chatRooms || []).find((item) => item.userId === user.id);
+      return send(res, 200, { unread: Number(room?.memberUnread || 0) });
     }
     if (pathname === "/api/chat/member" && req.method === "GET") {
       if (!protect(user, "member")) return send(res, 401, { error: "로그인이 필요합니다." });
@@ -1650,7 +1903,7 @@ async function api(req, res, db, user, pathname) {
       if (!protect(user, "staff")) return send(res, 403, { error: "권한이 없습니다." });
       const rooms = db.chatRooms.map((r) => {
         const member = db.users.find((u) => u.id === r.userId);
-        return { ...r, memberName: member?.nickname, username: member?.username, displayGrade: member?.displayGrade, internalGrade: member?.internalGrade };
+        return { ...r, memberName: member?.nickname, username: member?.username, displayGrade: member?.displayGrade, internalGrade: normalizeInternalGrade(member?.internalGrade) };
       }).sort((a, b) => String(b.lastAt).localeCompare(String(a.lastAt)));
       return send(res, 200, { rooms });
     }
@@ -1737,6 +1990,35 @@ function addMessage(db, room, user, senderType, message, attachment = null) {
 
 function memberMessages(db, roomId) {
   return db.chatMessages.filter((m) => m.roomId === roomId).map((m) => ({ id: m.id, senderType: m.senderType, displayName: m.displayName, message: m.message, attachment: m.attachment || null, deletedByMember: Boolean(m.deletedByMember), createdAt: m.createdAt }));
+}
+
+function addDirectMessage(db, room, user, message, attachment = null) {
+  const text = String(message || "").trim();
+  const isImage = attachment?.type?.startsWith?.("image/") && String(attachment.dataUrl || "").startsWith("data:image/");
+  const file = attachment?.name && isImage ? { name: String(attachment.name), type: String(attachment.type || ""), size: Number(attachment.size || 0), dataUrl: String(attachment.dataUrl) } : null;
+  if (!text && !file) return;
+  const peerId = (room.participantIds || []).find((idValue) => idValue !== user.id);
+  db.directChatMessages.push({ id: id("dmsg"), roomId: room.id, senderId: user.id, displayName: user.nickname, message: text, attachment: file, deleted: false, createdAt: now(), readBy: [user.id] });
+  room.lastMessage = text || `첨부파일: ${file.name}`;
+  room.lastAt = now();
+  room.unreadBy ||= {};
+  if (peerId) room.unreadBy[peerId] = Number(room.unreadBy[peerId] || 0) + 1;
+}
+
+function directMessages(db, room, user) {
+  return (db.directChatMessages || []).filter((m) => m.roomId === room.id).map((m) => {
+    const deleted = Boolean(m.deleted);
+    return {
+      id: m.id,
+      senderId: m.senderId,
+      side: m.senderId === user.id ? "member" : "staff",
+      displayName: m.displayName || "회원",
+      message: deleted ? "" : m.message,
+      attachment: deleted ? null : m.attachment || null,
+      deleted,
+      createdAt: m.createdAt
+    };
+  });
 }
 
 function audit(db, user, action, targetId = null) {
