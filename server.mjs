@@ -1,5 +1,5 @@
 import http from "node:http";
-import { readFile, writeFile, mkdir, stat, copyFile, rename, rm } from "node:fs/promises";
+import { readFile, writeFile, mkdir, stat, copyFile, rename, rm, readdir } from "node:fs/promises";
 import { createReadStream, existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 import crypto from "node:crypto";
@@ -15,8 +15,10 @@ const CHARGE_HOLDER = process.env.ITEMZONE_CHARGE_HOLDER || "예금주를 입력
 const CHARGE_NUMBER = process.env.ITEMZONE_CHARGE_NUMBER || "계좌번호를 입력하세요";
 const DATA_DIR = path.join(__dirname, "data");
 const DB_PATH = path.join(DATA_DIR, "db.json");
+const DB_BACKUP_KEEP = 30;
 const PUBLIC_SEED_PATH = path.join(DATA_DIR, "public-seed.json");
 const PUBLIC_DIR = path.join(__dirname, "public");
+const LEGAL_DIR = path.join(DATA_DIR, "legal");
 const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 let dbWriteQueue = Promise.resolve();
 
@@ -32,6 +34,11 @@ const WITHDRAW_BANKS = [
   "하나증권", "메리츠증권", "유안타증권", "교보증권", "하이투자증권", "현대차증권", "DB금융투자",
   "한화투자증권", "유진투자증권", "LS증권", "SK증권", "부국증권", "신영증권", "케이프투자증권", "다올투자증권"
 ];
+const LEGAL_DOCS = {
+  service: { title: "이용약관", file: "service.html" },
+  trade: { title: "아이템거래약관", file: "trade.html" },
+  privacy: { title: "개인정보취급방침", file: "privacy.html" }
+};
 const DEFAULT_NOTICE_POSTS = [
   { noticeNo: 50, pinned: false, title: "[업데이트 안내] 게임머니·아이템·기타 분할거래 기능 추가", date: "2026-04-30T15:40:00+09:00", body: "안녕하세요.\n\n아이템존입니다.\n\n거래 완료를 기다릴 필요 없이 여러 구매자와 동시에 거래가 가능하도록 분할거래 기능이 개선되었습니다.\n\n[기존]\n분할거래는 최초 신청된 거래가 완료되어야 남은 수량이 재등록됩니다.\n\n[변경]\n1. 거래중 상태에서도 남은 수량 자동 재등록\n- 다수의 거래자와 동시에 거래 가능\n\n2. 프리미엄 글 자동 유지\n- 최초 등록된 분할글이 프리미엄 옵션 글일 경우 남은 수량 재등록 시에도 혜택 유지\n\n앞으로도 편리하고 안전한 거래 환경을 제공하겠습니다.\n\n감사합니다." },
   { noticeNo: 49, pinned: false, title: "[당첨자 안내] 서든어택 이벤트 2", date: "2026-04-02T12:00:00+09:00", body: "서든어택 이벤트 당첨자를 안내드립니다.\n\n마이페이지의 고객센터 문의를 통해 지급 정보를 확인해주세요." },
@@ -303,19 +310,43 @@ async function retryBusy(task, attempts = 5) {
 
 async function writeDbPayload(payload) {
   await mkdir(DATA_DIR, { recursive: true });
+  await pruneDbBackups();
   try {
-    await copyFile(DB_PATH, path.join(DATA_DIR, "db.backup.json"));
-    await copyFile(DB_PATH, path.join(DATA_DIR, `db.backup-${Date.now()}.json`));
+    JSON.parse(await retryBusy(() => readFile(DB_PATH, "utf8")));
+    await retryBusy(() => copyFile(DB_PATH, path.join(DATA_DIR, "db.backup.json")));
+    await retryBusy(() => copyFile(DB_PATH, path.join(DATA_DIR, `db.backup-${Date.now()}.json`)));
   } catch {}
   const tempPath = path.join(DATA_DIR, `db.${process.pid}.${Date.now()}.tmp`);
   try {
     await writeFile(tempPath, payload, "utf8");
-    await retryBusy(() => copyFile(tempPath, DB_PATH));
-    await rm(tempPath, { force: true });
+    JSON.parse(await readFile(tempPath, "utf8"));
+    await retryBusy(() => rename(tempPath, DB_PATH));
+    await pruneDbBackups();
   } catch (error) {
     await rm(tempPath, { force: true }).catch(() => {});
     throw error;
   }
+}
+
+async function pruneDbBackups() {
+  try {
+    const entries = await readdir(DATA_DIR, { withFileTypes: true });
+    const backups = await Promise.all(
+      entries
+        .filter((entry) => entry.isFile() && /^db\.backup-\d+\.json$/.test(entry.name))
+        .map(async (entry) => {
+          const filePath = path.join(DATA_DIR, entry.name);
+          const info = await stat(filePath);
+          return { filePath, mtimeMs: info.mtimeMs };
+        })
+    );
+    await Promise.all(
+      backups
+        .sort((a, b) => b.mtimeMs - a.mtimeMs)
+        .slice(DB_BACKUP_KEEP)
+        .map((backup) => rm(backup.filePath, { force: true }).catch(() => {}))
+    );
+  } catch {}
 }
 
 async function writeDb(db) {
@@ -1149,14 +1180,14 @@ function homePage(user, db) {
     </section>
     ${chatWidget(user)}
     <footer class="site-footer">
-      <nav><a href="https://www.gamemarket.kr/page/terms?t=s">이용약관</a><a href="https://www.gamemarket.kr/page/terms?t=t">아이템거래약관</a><a href="https://www.gamemarket.kr/page/terms?t=p">개인정보취급방침</a><a href="/support" data-open-chat>광고/제휴문의</a></nav>
+      <nav><a href="/terms">이용약관</a><a href="/trade-terms">아이템거래약관</a><a href="/privacy">개인정보취급방침</a><a href="/support" data-open-chat>광고/제휴문의</a></nav>
       <div class="footer-body">
         <img src="/assets/logo/itemzone-logo-footer.png" alt="아이템존">
         <div>
           <p>상호 : 겜마톡 / 대표 : 유지훈 / 사업자등록번호 : 807-16-01721 / 통신판매업 : 2024-전주덕진-0100 / 사업자번호 : 807-16-01721</p>
           <p>전라북도 전주시 덕진구 가재미로 83(인후동1가)</p>
-          <p>겜마톡은 통신판매중개자이며 통신판매의 당사자가 아닙니다. 따라서 겜마톡은 상품 거래정보 및 거래에 대하여 책임을 지지 않습니다.</p>
-          <p>COPYRIGHT (C) GAME MARKET. ALL RIGHTS RESERVED.</p>
+          <p>아이템존은 통신판매중개자이며 통신판매의 당사자가 아닙니다. 따라서 아이템존은 상품 거래정보 및 거래에 대하여 책임을 지지 않습니다.</p>
+          <p>COPYRIGHT (C) ITEMZONE. ALL RIGHTS RESERVED.</p>
         </div>
       </div>
     </footer>
@@ -1547,6 +1578,23 @@ function supportPage(user) {
   return layout("고객센터", user, `<main class="support-page"><section class="panel"><h1>고객센터</h1><p>우하단 상담 버튼으로 로그인 회원만 실시간 상담을 시작할 수 있습니다.</p></section></main>${chatWidget(user)}`, "support");
 }
 
+function legalPage(user, kind = "service") {
+  const doc = LEGAL_DOCS[kind] || LEGAL_DOCS.service;
+  let body = "";
+  try {
+    body = readFileSync(path.join(LEGAL_DIR, doc.file), "utf8");
+  } catch {
+    body = `<p>약관 문서를 불러오지 못했습니다.</p>`;
+  }
+  body = body.replace(/<h3>[\s\S]*?<\/h3>/i, `<h3>${doc.title} - 아이템존</h3>`);
+  return layout(doc.title, user, `<main class="legal-page">
+    <section class="legal-card">
+      ${body}
+    </section>
+    ${chatWidget(user)}
+  </main>`, "notice");
+}
+
 function noticesPage(user, db, page = 1) {
   const all = noticePosts(db);
   const pinned = all.filter((post) => post.pinned);
@@ -1617,7 +1665,6 @@ function chatWidget(user) {
   <button class="chat-fab" id="chatOpen" aria-label="상담사연결" aria-expanded="false"><img class="support-icon-blue" src="/assets/icons/chat-support.png" alt=""><img class="support-icon-red" src="/assets/icons/chat-support-red.png" alt=""><span>×</span></button>
   <section class="chat-widget" id="chatWidget" aria-label="아이템존 고객센터">
     <header class="member-chat-head">
-      <button type="button" class="chat-back" aria-label="뒤로">‹</button>
       <img class="chat-agent-mark" src="/assets/chat/customer-center-agent.png" alt="">
       <div><b>아이템존 고객센터</b><small>상담시간은 오전9시 ~ 새벽4시까지입니다.</small></div>
       <button type="button" id="chatClose" class="chat-close" aria-label="닫기">×</button>
@@ -2158,6 +2205,13 @@ async function router(req, res) {
   if (url.pathname === "/mypage") return protect(user, "member") ? send(res, 200, myPage(user, db)) : redirect(res, "/login");
   if (url.pathname === "/admin") return protect(user, "admin") ? send(res, 200, adminPage(user, db)) : redirect(res, "/login");
   if (url.pathname === "/staff") return protect(user, "staff") ? send(res, 200, staffPage(user)) : redirect(res, "/login");
+  if (url.pathname === "/terms") return send(res, 200, legalPage(user, "service"));
+  if (url.pathname === "/trade-terms") return send(res, 200, legalPage(user, "trade"));
+  if (url.pathname === "/privacy") return send(res, 200, legalPage(user, "privacy"));
+  if (url.pathname === "/page/terms") {
+    const kind = { s: "service", t: "trade", p: "privacy" }[url.searchParams.get("t") || "s"] || "service";
+    return send(res, 200, legalPage(user, kind));
+  }
   if (url.pathname === "/support" || url.pathname === "/giftcards") return send(res, 200, supportPage(user));
   send(res, 404, layout("404", user, "<main class='panel'><h1>페이지를 찾을 수 없습니다.</h1></main>"));
 }

@@ -3,7 +3,7 @@
   --deep: #071a3c;
   --line: #dfe6f2;
   --muted: #6d7888;
-  --bg: #f3f6fb;
+  --bg: #fff;
   --black: #14181e;
 }
 
@@ -2151,6 +2151,105 @@ input:focus-visible {
   margin: 0 0 6px;
   color: #f3f4f6;
 }
+.legal-page {
+  max-width: 980px;
+  margin: 30px auto 72px;
+  padding: 0 18px;
+}
+.legal-card {
+  padding: 28px;
+  border: 1px solid #d9e4f1;
+  border-radius: 8px;
+  background: #fff;
+  box-shadow: 0 12px 32px rgba(15, 23, 42, .08);
+  overflow: hidden;
+}
+.legal-card *,
+.legal-card *::before,
+.legal-card *::after {
+  box-sizing: border-box;
+  max-width: 100%;
+}
+.legal-card .terms_wrap,
+.legal-card .sub_con_728 {
+  width: 100%;
+  max-width: 100%;
+}
+.legal-card .tit_area {
+  margin-bottom: 14px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid #0f172a !important;
+}
+.legal-card h3 {
+  margin: 0;
+  color: #0f172a;
+  font-size: 24px;
+  letter-spacing: 0;
+}
+.legal-card table {
+  width: 100% !important;
+  min-width: 0 !important;
+  border-collapse: collapse;
+  table-layout: fixed;
+}
+.legal-card td {
+  min-width: 0;
+  color: #475569;
+  font-size: 14px;
+  line-height: 1.85;
+  vertical-align: top;
+  overflow-wrap: anywhere;
+  word-break: break-all;
+}
+.legal-card > .terms_wrap > .sub_con_728 > table > tbody > tr > td {
+  padding: 18px 34px !important;
+  border: 1px solid #e2e8f0 !important;
+}
+.legal-card table table td {
+  border: 0;
+}
+.legal-card tr:has(> td > br:only-child) td {
+  height: 18px;
+  padding: 0 !important;
+  font-size: 0;
+  line-height: 18px;
+}
+.legal-card tr:has(> td > br:only-child):first-child td {
+  height: 8px;
+  line-height: 8px;
+}
+.legal-card .fs16 {
+  padding-top: 0 !important;
+  padding-bottom: 10px !important;
+}
+.legal-card .fs15 {
+  padding-top: 12px !important;
+  padding-bottom: 8px !important;
+}
+.legal-card .txt13 {
+  padding-bottom: 8px !important;
+}
+.legal-card td[bgcolor="#aaaaaa"] {
+  padding: 18px 20px !important;
+  border: 0 !important;
+  background: #9ca3af !important;
+  color: #fff;
+}
+.legal-card td[bgcolor="#aaaaaa"] font {
+  color: #fff !important;
+}
+.legal-card .fs16,
+.legal-card .fs15,
+.legal-card font[color="#000000"] {
+  color: #0f172a;
+  font-weight: 900;
+}
+.legal-card .fs16 {
+  font-size: 17px;
+}
+.legal-card .fs15 {
+  font-size: 15px;
+}
 .chat-fab {
   background: transparent;
   box-shadow: 0 10px 24px rgba(68, 111, 221, .28);
@@ -2457,6 +2556,11 @@ input:focus-visible {
   border: 1px solid #dbe6f3;
   border-radius: 8px;
 }
+.games-shell {
+  position: relative;
+  overflow: hidden;
+  isolation: isolate;
+}
 .games-head {
   padding: 24px 26px 18px;
   border-bottom: 1px solid #edf2f8;
@@ -2480,12 +2584,15 @@ input:focus-visible {
   color: #64748b;
 }
 .games-filter {
+  position: relative;
+  z-index: 2;
   display: flex;
   flex-wrap: wrap;
   justify-content: space-between;
   gap: 8px;
   padding: 28px 22px 16px;
   border-bottom: 0;
+  background: #fff;
 }
 .games-filter a,
 .trade-filter a {
@@ -2514,10 +2621,13 @@ input:focus-visible {
   border-color: #0867db;
 }
 .games-grid {
+  position: relative;
+  z-index: 1;
   display: grid;
   grid-template-columns: repeat(6, minmax(0, 1fr));
   gap: 10px;
   padding: 0 22px 22px;
+  background: #fff;
 }
 .game-list-card {
   display: grid;
@@ -3020,6 +3130,20 @@ input:focus-visible {
   }
   .site-footer img {
     width: 160px;
+  }
+  .legal-page {
+    margin: 18px 10px 92px;
+    padding: 0;
+  }
+  .legal-card {
+    padding: 18px 12px;
+    overflow-x: auto;
+  }
+  .legal-card > .terms_wrap > .sub_con_728 > table > tbody > tr > td {
+    padding: 14px 16px !important;
+  }
+  .legal-card h3 {
+    font-size: 20px;
   }
   .games-page,
   .game-detail-page,
@@ -4101,8 +4225,8 @@ input:focus-visible {
 .chat-widget .member-chat-head {
   min-height: 66px;
   display: grid;
-  grid-template-columns: 30px 44px 1fr 36px;
-  gap: 6px;
+  grid-template-columns: 44px 1fr 36px;
+  gap: 8px;
   align-items: center;
   padding: 8px 14px 7px;
   background: #fff;
@@ -6552,4 +6676,115 @@ input:focus-visible {
   font-size: 26px;
   font-weight: 900;
   line-height: 1;
+}
+
+/* Front white shell and soft GNB edges */
+body,
+main,
+.topbar,
+.top-inner {
+  background: #fff;
+}
+
+.topbar {
+  border-bottom-color: #fff;
+  box-shadow: none;
+}
+
+.main-menu {
+  background:
+    linear-gradient(90deg, rgba(244, 247, 251, 0) 0, #f4f7fb 44px, #f4f7fb calc(100% - 44px), rgba(244, 247, 251, 0) 100%);
+  border-top-color: #fff;
+  border-bottom-color: #fff;
+  box-shadow: none;
+}
+
+.main-menu .nav-link[data-nav="sell"],
+.main-menu .nav-link[data-nav="buy"] {
+  height: 42px;
+  min-height: 42px;
+  align-self: stretch;
+  margin: 0;
+  border-radius: 0;
+  background: transparent;
+  transform-origin: center;
+}
+
+.main-menu .nav-link[data-nav="sell"] {
+  color: #0867db;
+}
+
+.main-menu .nav-link[data-nav="buy"] {
+  color: #16a34a;
+}
+
+.main-menu .nav-link[data-nav="sell"]::before,
+.main-menu .nav-link[data-nav="buy"]::before {
+  display: block;
+  left: 0;
+  right: 0;
+  height: 3px;
+  border-radius: 0;
+}
+
+.main-menu .nav-link[data-nav="sell"]::before {
+  background: #0867db;
+}
+
+.main-menu .nav-link[data-nav="buy"]::before {
+  background: #16a34a;
+}
+
+.main-menu .nav-link[data-nav="sell"]:hover {
+  background: transparent;
+  color: #0867db;
+  transform: none;
+}
+
+.main-menu .nav-link[data-nav="buy"]:hover {
+  background: transparent;
+  color: #16a34a;
+  transform: none;
+}
+
+@media (max-width: 900px) {
+  .main-menu {
+    background: #fff;
+    border-top-color: #fff;
+    border-bottom-color: #fff;
+    box-shadow: none;
+  }
+
+  .main-menu .nav-link[data-nav="sell"],
+  .main-menu .nav-link[data-nav="buy"] {
+    min-height: 44px;
+    height: 44px;
+    border-radius: 0;
+  }
+}
+
+/* Soft separation for white surfaces on the white page background */
+.hero-banner,
+.rank-panel,
+.home-login,
+.notice-card,
+.ad-placeholder,
+.dashboard .quick-grid,
+.member-summary,
+.quick-actions,
+.mypage-summary-card,
+.mypage-simple-panel,
+.mypage-simple-history,
+.mypage-quick-menu,
+.mypage-trades,
+.mileage-history,
+.mileage-info-panel,
+.mileage-request-panel {
+  box-shadow: 0 16px 34px rgba(15, 23, 42, .08);
+}
+
+.mileage-feature-grid article,
+.mileage-balance-box,
+.withdraw-account-card {
+  box-shadow: 0 10px 22px rgba(15, 23, 42, .06);
 }
