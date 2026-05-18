@@ -2230,6 +2230,7 @@ input:focus-visible {
   gap: 10px;
 }
 .trade-card {
+  position: relative;
   display: grid;
   grid-template-columns: 1fr auto;
   gap: 8px 14px;
@@ -2237,7 +2238,17 @@ input:focus-visible {
   border: 1px solid #dce8f7;
   border-radius: 8px;
   background: #fff;
+  cursor: pointer;
   transition: transform .14s ease, box-shadow .14s ease;
+}
+.trade-card__link {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  border-radius: 8px;
+}
+.trade-card > :not(.trade-card__link) {
+  pointer-events: none;
 }
 .trade-card__meta {
   display: flex;
@@ -2277,12 +2288,19 @@ input:focus-visible {
   font-size: 20px;
 }
 .status-update {
+  position: relative;
+  z-index: 2;
   grid-column: 1 / -1;
   display: flex;
   align-items: center;
   gap: 8px;
   color: #64748b;
   font-weight: 800;
+  pointer-events: auto;
+  cursor: default;
+}
+.status-update * {
+  pointer-events: auto;
 }
 .status-update select {
   min-height: 32px;
@@ -2781,6 +2799,30 @@ input:focus-visible {
   border-left: 0;
 }
 
+.compose-field--unit {
+  grid-column: 1 / -1;
+  order: 1;
+  border-left: 0;
+}
+
+.compose-field--quantity {
+  grid-column: 1 / -1;
+  order: 2;
+  border-left: 0;
+}
+
+.compose-field--price {
+  order: 3;
+}
+
+.trade-compose__body > .compose-field:nth-child(7) {
+  order: 4;
+}
+
+.trade-compose__body > .compose-field:nth-child(8) {
+  order: 5;
+}
+
 .compose-field b {
   color: #0f172a;
   font-size: 15px;
@@ -2877,6 +2919,12 @@ input:focus-visible {
   font-weight: 800;
 }
 
+.quantity-stack {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(140px, 220px);
+  gap: 8px;
+}
+
 .price-presets {
   grid-column: 2;
   margin-top: 8px;
@@ -2923,6 +2971,314 @@ input:focus-visible {
   margin: 0;
   color: #075bd5;
   font-weight: 800;
+}
+
+.trade-detail-page {
+  max-width: 1110px;
+  margin: 24px auto 96px;
+  padding: 0 12px;
+}
+
+.trade-detail-shell {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 320px;
+  gap: 24px;
+  align-items: start;
+}
+
+.trade-detail-card {
+  padding: 20px;
+  border-radius: 8px;
+  background: #fff;
+}
+
+.trade-detail-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  padding-bottom: 12px;
+  border-bottom: 2px solid color-mix(in srgb, var(--game-accent, #16a34a) 24%, #e5e7eb);
+}
+
+.trade-detail-head a {
+  display: inline-flex;
+  margin-bottom: 10px;
+  color: var(--game-accent, #075bd5);
+  font-size: 13px;
+  font-weight: 900;
+  text-decoration: none;
+}
+
+.trade-detail-head p {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  margin: 0;
+}
+
+.trade-detail-head strong {
+  color: #0058d8;
+  font-size: 20px;
+  font-weight: 900;
+}
+
+.trade-detail-head strong.buy {
+  color: #16a34a;
+}
+
+.trade-detail-head p span {
+  color: #64748b;
+  font-size: 13px;
+  font-weight: 900;
+}
+
+.trade-detail-head em {
+  display: inline-flex;
+  align-items: center;
+  min-height: 28px;
+  padding: 0 10px;
+  border-radius: 999px;
+  background: #eaf2ff;
+  color: #075bd5;
+  font-size: 12px;
+  font-style: normal;
+  font-weight: 900;
+}
+
+.trade-detail-card > h1 {
+  margin: 0;
+  padding: 22px 0;
+  color: #0f172a;
+  font-size: 25px;
+  letter-spacing: 0;
+}
+
+.trade-detail-code {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  align-items: center;
+  margin-bottom: 24px;
+  color: #94a3b8;
+  font-weight: 800;
+}
+
+.trade-detail-code span {
+  display: inline-flex;
+  align-items: center;
+  min-height: 30px;
+  padding: 0 14px;
+  border-radius: 8px;
+  background: #eaf8ef;
+  color: #16a34a;
+}
+
+.trade-detail-summary {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  margin: 0 0 24px;
+}
+
+.trade-detail-summary div,
+.trade-detail-info-grid div {
+  display: grid;
+  align-content: center;
+  min-height: 90px;
+  padding: 16px;
+  border: 1px solid #edf2f8;
+  border-radius: 8px;
+  background: #f8fafc;
+  text-align: center;
+}
+
+.trade-detail-summary dt,
+.trade-detail-info-grid dt {
+  margin-bottom: 4px;
+  color: #64748b;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.trade-detail-summary dd,
+.trade-detail-info-grid dd {
+  margin: 0;
+  color: #111827;
+  font-size: 18px;
+  font-weight: 900;
+}
+
+.trade-detail-summary div:nth-child(2) dd {
+  color: #16a34a;
+}
+
+.trade-detail-section {
+  margin-top: 26px;
+}
+
+.trade-detail-section h2 {
+  margin: 0 0 12px;
+  color: #020617;
+  font-size: 22px;
+  letter-spacing: 0;
+}
+
+.trade-detail-info-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  margin: 0;
+}
+
+.trade-detail-section-head {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.trade-detail-section-head span {
+  padding: 8px 14px;
+  border: 1px solid #e5e7eb;
+  border-radius: 6px;
+  color: #111827;
+  font-size: 13px;
+  font-weight: 900;
+}
+
+.trade-member-card {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  min-height: 96px;
+  padding: 18px 22px;
+  border: 1px solid #dbe3ee;
+  border-radius: 8px;
+}
+
+.trade-member-card b {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 56px;
+  height: 56px;
+  border: 3px solid #f43f5e;
+  border-radius: 50%;
+  color: #f43f5e;
+  font-size: 24px;
+  font-weight: 900;
+}
+
+.trade-member-card strong {
+  color: #0f172a;
+  font-size: 22px;
+}
+
+.trade-member-card span {
+  color: #475569;
+  font-weight: 800;
+}
+
+.trade-detail-action {
+  position: sticky;
+  top: 88px;
+  padding: 22px;
+  border-radius: 8px;
+  background: #fff;
+}
+
+.trade-detail-action dl {
+  display: grid;
+  gap: 0;
+  margin: 0 0 22px;
+}
+
+.trade-detail-action dl div {
+  display: flex;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 16px 0;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.trade-detail-action dt {
+  color: #475569;
+  font-weight: 800;
+}
+
+.trade-detail-action dd {
+  margin: 0;
+  color: #020617;
+  font-weight: 900;
+}
+
+.trade-detail-action dl div:first-child dd {
+  color: #16a34a;
+  font-size: 20px;
+}
+
+.trade-detail-buttons {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.trade-detail-buttons button,
+.trade-detail-buttons a {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 44px;
+  border-radius: 8px;
+  font: inherit;
+  font-weight: 900;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.trade-detail-chat {
+  border: 1px solid #0058d8;
+  background: #fff;
+  color: #0058d8;
+}
+
+.trade-detail-request {
+  border: 0;
+  background: #16a34a;
+  color: #fff;
+}
+
+.trade-detail-buttons button:disabled {
+  opacity: .6;
+  cursor: progress;
+}
+
+.trade-detail-buttons em {
+  grid-column: 1 / -1;
+  padding-top: 6px;
+  color: #64748b;
+  font-style: normal;
+  font-weight: 900;
+  text-align: center;
+}
+
+.trade-detail-body {
+  min-height: 280px;
+  padding: 18px;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  color: #111827;
+  line-height: 1.75;
+}
+
+.trade-detail-body img {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  margin: 14px 0;
+  border-radius: 8px;
 }
 
 .market-panel {
@@ -3027,6 +3383,14 @@ input:focus-visible {
     margin: 14px auto 90px;
   }
 
+  .trade-detail-page {
+    margin: 14px auto 90px;
+  }
+
+  .trade-detail-shell {
+    grid-template-columns: 1fr;
+  }
+
   .trade-compose__hero {
     grid-template-columns: 68px minmax(0, 1fr);
     padding: 18px;
@@ -3058,6 +3422,23 @@ input:focus-visible {
 
   .price-presets {
     grid-column: auto;
+  }
+
+  .quantity-stack {
+    grid-template-columns: 1fr;
+  }
+
+  .trade-detail-summary {
+    grid-template-columns: 1fr;
+  }
+
+  .trade-detail-info-grid,
+  .trade-detail-buttons {
+    grid-template-columns: 1fr;
+  }
+
+  .trade-detail-action {
+    position: static;
   }
 
   .trade-compose__actions {
@@ -4662,4 +5043,321 @@ input:focus-visible {
   .withdraw-account-card div {
     grid-template-columns: 1fr;
   }
+}
+
+/* Targeted fixes: notice delete, mileage balance, global search autocomplete */
+.notice-detail-actions {
+  margin-top: 20px;
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  align-items: center;
+}
+
+.notice-detail-actions .notice-list-button {
+  margin: 0;
+}
+
+.notice-delete-button {
+  min-height: 44px;
+  padding: 0 22px;
+  border: 1px solid #fecaca;
+  border-radius: 9px;
+  background: #fff;
+  color: #dc2626;
+  font-weight: 900;
+}
+
+.notice-delete-button:hover,
+.notice-delete-button:focus-visible {
+  background: #fff1f2;
+  outline: none;
+}
+
+.mileage-page {
+  margin-bottom: 34px;
+  align-items: stretch;
+}
+
+.mileage-info-panel,
+.mileage-request-panel {
+  min-height: 0;
+  height: auto;
+}
+
+.mileage-info-panel {
+  padding-bottom: 26px;
+}
+
+.mileage-feature-grid {
+  margin-bottom: 28px;
+}
+
+.mileage-guide {
+  margin-bottom: 0;
+}
+
+.mileage-guide li:last-child {
+  margin-bottom: 0;
+}
+
+.mileage-request-panel {
+  align-self: stretch;
+}
+
+.top-inner {
+  min-width: 0;
+}
+
+.search,
+.search-field {
+  min-width: 0;
+}
+
+.suggest-panel {
+  left: 0;
+  right: 0;
+  display: block;
+  padding: 10px;
+  overflow: hidden;
+}
+
+.suggest-panel.is-open,
+.search:focus-within .suggest-panel {
+  opacity: 1;
+  pointer-events: auto;
+  transform: translateY(0);
+}
+
+.suggest-panel b {
+  display: block;
+  margin: 0 0 8px;
+  font-size: 13px;
+}
+
+.suggest-list {
+  display: grid;
+  gap: 6px;
+  max-height: 370px;
+  overflow: auto;
+}
+
+.suggest-list a {
+  min-height: 44px;
+  display: grid;
+  grid-template-columns: 30px minmax(0, 1fr);
+  gap: 9px;
+  align-items: center;
+  padding: 7px 9px;
+  border-radius: 8px;
+  color: #111827;
+  font-size: 14px;
+  font-weight: 800;
+  text-decoration: none;
+}
+
+.suggest-list a:hover,
+.suggest-list a:focus-visible {
+  background: #eef5ff;
+  color: #075bdc;
+  outline: none;
+}
+
+.suggest-list img {
+  width: 30px;
+  height: 30px;
+  border-radius: 7px;
+  object-fit: cover;
+}
+
+.suggest-list span {
+  display: block;
+  min-width: 0;
+  padding: 0;
+  background: transparent;
+  color: inherit;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.suggest-empty {
+  margin: 0;
+  padding: 8px 4px;
+  color: #64748b;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+@media (max-width: 980px) {
+  .top-inner {
+    grid-template-columns: minmax(150px, 220px) minmax(0, 1fr);
+  }
+
+  .top-inner .account {
+    grid-column: 1 / -1;
+    justify-content: flex-end;
+  }
+
+  .search {
+    width: 100%;
+  }
+}
+
+@media (max-width: 640px) {
+  .suggest-panel {
+    top: calc(100% + 8px);
+  }
+
+  .notice-detail-actions {
+    justify-content: stretch;
+  }
+
+  .notice-detail-actions .notice-list-button,
+  .notice-delete-button {
+    flex: 1;
+  }
+}
+
+/* Follow-up compact mileage and staff image chat */
+.mileage-page {
+  margin-bottom: 18px;
+  align-items: start;
+}
+
+.mileage-info-panel {
+  padding-top: 28px;
+  padding-bottom: 20px;
+}
+
+.mileage-request-panel {
+  align-self: start;
+  padding-bottom: 20px;
+}
+
+.mileage-feature-grid {
+  margin-bottom: 22px;
+}
+
+.mileage-feature-grid article {
+  min-height: 158px;
+}
+
+.mileage-feature-grid article:nth-child(2) {
+  margin-top: 28px;
+}
+
+.mileage-guide li {
+  margin-bottom: 10px;
+  line-height: 1.42;
+}
+
+.chat-log .chat-image-link {
+  display: block;
+  margin-top: 6px;
+  padding: 0;
+  border: 0;
+  border-radius: 12px;
+  background: transparent;
+  line-height: 0;
+  cursor: zoom-in;
+}
+
+.chat-log .chat-image-link:focus-visible {
+  outline: 2px solid #075bdc;
+  outline-offset: 2px;
+}
+
+#staffSend.staff-send-form {
+  grid-template-columns: 1fr auto 80px;
+  align-items: center;
+}
+
+#staffSend.staff-send-form input[name="message"] {
+  min-height: 42px;
+}
+
+#staffChatAttach {
+  min-height: 42px;
+  padding: 0 12px;
+  border: 1px solid #dce4ef;
+  border-radius: 8px;
+  background: #fff;
+  color: #075bdc;
+  font-size: 13px;
+  font-weight: 900;
+}
+
+.staff-attachment-preview {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 0;
+}
+
+.staff-attachment-preview:empty {
+  display: none;
+}
+
+.staff-attachment-preview img {
+  width: 38px;
+  height: 38px;
+  border-radius: 8px;
+  object-fit: cover;
+}
+
+.staff-attachment-preview span {
+  min-width: 0;
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 800;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.staff-attachment-preview button {
+  min-height: 28px;
+  padding: 0 8px;
+  border-radius: 999px;
+  background: #eef2f7;
+  color: #475569;
+}
+
+.chat-image-viewer {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: none;
+  place-items: center;
+  padding: 28px;
+  background: rgba(15, 23, 42, .72);
+}
+
+.chat-image-viewer.open {
+  display: grid;
+}
+
+.chat-image-viewer img {
+  max-width: min(100%, 1080px);
+  max-height: calc(100vh - 80px);
+  border-radius: 12px;
+  background: #fff;
+  object-fit: contain;
+  box-shadow: 0 24px 70px rgba(0, 0, 0, .35);
+}
+
+.chat-image-viewer button {
+  position: absolute;
+  top: 22px;
+  right: 22px;
+  width: 42px;
+  height: 42px;
+  border-radius: 999px;
+  background: #fff;
+  color: #111827;
+  font-size: 26px;
+  font-weight: 900;
+  line-height: 1;
 }

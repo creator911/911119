@@ -20,6 +20,27 @@ function escapeAttr(value) {
   return escapeHtml(value).replace(/`/g, "&#96;");
 }
 
+const chatImageSources = new Map();
+
+function openImagePreview(src, name = "") {
+  let viewer = $("#chatImageViewer");
+  if (!viewer) {
+    viewer = document.createElement("div");
+    viewer.id = "chatImageViewer";
+    viewer.className = "chat-image-viewer";
+    viewer.innerHTML = `<button type="button" aria-label="닫기">×</button><img alt="">`;
+    document.body.appendChild(viewer);
+    $("button", viewer).addEventListener("click", () => viewer.classList.remove("open"));
+    viewer.addEventListener("click", (event) => {
+      if (event.target === viewer) viewer.classList.remove("open");
+    });
+  }
+  const img = $("img", viewer);
+  img.src = src;
+  img.alt = name;
+  viewer.classList.add("open");
+}
+
 function openMemberChat() {
   if (!chatWidget) return false;
   chatWidget.classList.add("open");
@@ -44,6 +65,39 @@ function toggleMemberChat() {
 }
 
 document.addEventListener("click", async (event) => {
+  const tradeComplete = event.target.closest("[data-trade-complete]");
+  if (tradeComplete) {
+    event.preventDefault();
+    tradeComplete.disabled = true;
+    try {
+      await post("/api/trade/complete", { id: tradeComplete.dataset.tradeId, type: tradeComplete.dataset.tradeComplete });
+      location.reload();
+    } catch (error) {
+      alert(error.message);
+      tradeComplete.disabled = false;
+    }
+    return;
+  }
+  const tradeAction = event.target.closest("[data-trade-action]");
+  if (tradeAction) {
+    event.preventDefault();
+    tradeAction.disabled = true;
+    try {
+      await post("/api/trade/action", { id: tradeAction.dataset.tradeId, type: tradeAction.dataset.tradeAction });
+      location.reload();
+    } catch (error) {
+      alert(error.message);
+      tradeAction.disabled = false;
+    }
+    return;
+  }
+  const chatImage = event.target.closest("[data-chat-image-id], [data-chat-image]");
+  if (chatImage) {
+    event.preventDefault();
+    const savedImage = chatImageSources.get(chatImage.dataset.chatImageId);
+    openImagePreview(savedImage?.src || chatImage.dataset.chatImage, savedImage?.name || chatImage.dataset.chatImageName || "");
+    return;
+  }
   const chatTrigger = event.target.closest("[data-open-chat]");
   if (chatTrigger) {
     event.preventDefault();
@@ -103,6 +157,40 @@ document.addEventListener("click", async (event) => {
     const form = noticeImage.closest(".admin-notice-form");
     $("[data-notice-file]", form)?.click();
   }
+  const tradeApply = event.target.closest("[data-trade-apply]");
+  if (tradeApply) {
+    const form = tradeApply.closest(".trade-compose");
+    const editor = $("[data-trade-editor]", form);
+    if (editor) {
+      const family = $("[data-trade-font]", form)?.value || "Malgun Gothic";
+      const size = $("[data-trade-size]", form)?.value || "16";
+      const weight = $("[data-trade-weight]", form)?.value || "400";
+      document.execCommand("fontName", false, family);
+      document.execCommand("fontSize", false, "4");
+      editor.querySelectorAll("font[size='4']").forEach((node) => {
+        const span = document.createElement("span");
+        span.style.fontFamily = family;
+        span.style.fontSize = `${size}px`;
+        span.style.fontWeight = weight;
+        span.innerHTML = node.innerHTML;
+        node.replaceWith(span);
+      });
+      editor.focus();
+      syncTradeEditor(form);
+    }
+  }
+  const tradeImage = event.target.closest("[data-trade-image]");
+  if (tradeImage) {
+    const form = tradeImage.closest(".trade-compose");
+    $("[data-trade-file]", form)?.click();
+  }
+  const noticeDelete = event.target.closest("[data-notice-delete]");
+  if (noticeDelete) {
+    event.preventDefault();
+    if (!confirm("공지사항을 삭제할까요?")) return;
+    await post("/api/admin/notice/delete", { id: noticeDelete.dataset.noticeDelete });
+    location.href = "/notices";
+  }
 });
 
 function syncNoticeEditor(form) {
@@ -110,6 +198,13 @@ function syncNoticeEditor(form) {
   const input = form?.elements.body;
   if (!editor || !input) return;
   input.value = editor.innerHTML.trim();
+}
+
+function syncTradeEditor(form) {
+  const editor = $("[data-trade-editor]", form);
+  if (!editor) return;
+  if (form?.elements.description) form.elements.description.value = editor.innerHTML.trim();
+  if (form?.elements.descriptionText) form.elements.descriptionText.value = editor.innerText.trim();
 }
 
 document.addEventListener("change", async (event) => {
@@ -154,6 +249,58 @@ if (featuredGameCards.length) {
   });
 }
 
+const globalSearchForm = $(".search");
+const globalSearchInput = $("#globalSearch");
+const globalSuggest = $("#globalSuggest");
+let globalSearchResults = [];
+let globalSearchTimer = null;
+
+function renderSearchSuggestions(games, title = "추천 검색어") {
+  if (!globalSuggest) return;
+  globalSearchResults = games || [];
+  if (!globalSearchResults.length) {
+    globalSuggest.innerHTML = `<b>${escapeHtml(title)}</b><p class="suggest-empty">검색 결과가 없습니다.</p>`;
+    globalSuggest.classList.add("is-open");
+    return;
+  }
+  globalSuggest.innerHTML = `<b>${escapeHtml(title)}</b><div class="suggest-list">${globalSearchResults.map((game) => `
+    <a href="/games/${encodeURIComponent(game.slug)}" data-search-game="${escapeAttr(game.slug)}">
+      <img src="${escapeAttr(game.imageUrl)}" alt="">
+      <span>${escapeHtml(game.name)}</span>
+    </a>
+  `).join("")}</div>`;
+  globalSuggest.classList.add("is-open");
+}
+
+async function loadSearchSuggestions(query = "") {
+  if (!globalSuggest) return [];
+  const res = await fetch(`/api/search-games?q=${encodeURIComponent(query)}`);
+  if (!res.ok) return [];
+  const data = await res.json();
+  renderSearchSuggestions(data.games || [], query ? "검색 결과" : "추천 검색어");
+  return data.games || [];
+}
+
+if (globalSearchForm && globalSearchInput && globalSuggest) {
+  globalSearchInput.addEventListener("focus", () => {
+    loadSearchSuggestions(globalSearchInput.value.trim()).catch(() => {});
+  });
+  globalSearchInput.addEventListener("input", () => {
+    clearTimeout(globalSearchTimer);
+    globalSearchTimer = setTimeout(() => loadSearchSuggestions(globalSearchInput.value.trim()).catch(() => {}), 120);
+  });
+  globalSearchForm.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const query = globalSearchInput.value.trim();
+    const results = query || !globalSearchResults.length ? await loadSearchSuggestions(query) : globalSearchResults;
+    const first = results[0];
+    if (first?.slug) location.href = `/games/${encodeURIComponent(first.slug)}`;
+  });
+  document.addEventListener("click", (event) => {
+    if (!event.target.closest(".search")) globalSuggest.classList.remove("is-open");
+  });
+}
+
 const noticeForm = $(".admin-notice-form");
 if (noticeForm) {
   const editor = $("[data-notice-editor]", noticeForm);
@@ -174,6 +321,26 @@ if (noticeForm) {
     reader.readAsDataURL(file);
   });
 }
+
+$$('form[data-form="sell"], form[data-form="buy"]').forEach((form) => {
+  const editor = $("[data-trade-editor]", form);
+  editor?.addEventListener("input", () => syncTradeEditor(form));
+  editor?.addEventListener("focus", () => {
+    if (editor.innerText.trim() === "거래 조건, 연락 가능 시간, 확인이 필요한 정보를 적어주세요.") editor.innerHTML = "<p><br></p>";
+  });
+  $("[data-trade-file]", form)?.addEventListener("change", (event) => {
+    const file = event.target.files?.[0];
+    if (!file || !file.type.startsWith("image/")) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      editor?.focus();
+      document.execCommand("insertHTML", false, `<p><img src="${reader.result}" alt=""></p><p><br></p>`);
+      event.target.value = "";
+      syncTradeEditor(form);
+    };
+    reader.readAsDataURL(file);
+  });
+});
 
 function formatWon(value) {
   return `${Number(value || 0).toLocaleString()}원`;
@@ -288,8 +455,9 @@ $$("form[data-form]").forEach((form) => {
     event.preventDefault();
     const message = $(".form-message", form);
     try {
-      const data = formData(form);
       const type = form.dataset.form;
+      if (type === "sell" || type === "buy") syncTradeEditor(form);
+      const data = formData(form);
       if (type === "login") {
         await post("/api/login", data);
         location.href = "/";
@@ -382,6 +550,11 @@ if (chatOpen && chatWidget) {
     reader.readAsDataURL(file);
   });
   chatInput?.addEventListener("input", updateChatSendState);
+  chatInput?.addEventListener("keydown", (event) => {
+    if (event.key !== "Enter" || event.isComposing) return;
+    event.preventDefault();
+    chatForm?.requestSubmit();
+  });
   chatForm?.addEventListener("submit", async (event) => {
     event.preventDefault();
     const input = event.currentTarget.message;
@@ -409,7 +582,8 @@ async function loadMemberChat() {
       return `<p class="member deleted"><span>삭제된 메세지입니다</span></p>`;
     }
     const text = m.message ? `<span>${escapeHtml(m.message)}</span>` : "";
-    const image = m.attachment ? `<img class="chat-image" src="${escapeAttr(m.attachment.dataUrl)}" alt="${escapeAttr(m.attachment.name)}">` : "";
+    if (m.attachment) chatImageSources.set(m.id, { src: m.attachment.dataUrl, name: m.attachment.name });
+    const image = m.attachment ? `<button type="button" class="chat-image-link" data-chat-image-id="${escapeAttr(m.id)}"><img class="chat-image" src="${escapeAttr(m.attachment.dataUrl)}" alt="${escapeAttr(m.attachment.name)}"></button>` : "";
     const action = side === "member" ? `<button class="message-more" data-chat-menu="${escapeAttr(m.id)}" aria-label="메시지 액션">⋮</button><em class="message-actions" data-chat-actions="${escapeAttr(m.id)}"><button type="button" data-chat-delete="${escapeAttr(m.id)}">메시지 삭제</button></em>` : "";
     return `<p class="${side}" data-message-id="${escapeAttr(m.id)}"><b>${escapeHtml(name)}</b>${action}${text}${image}</p>`;
   }).join("");
@@ -447,11 +621,6 @@ async function loadStaffRooms() {
   list.innerHTML = rooms.map((room) => `<button class="room-row ${activeRoom === room.id ? "active" : ""}" data-room="${room.id}">
     <b>${room.memberName || room.username}</b><span>${room.displayGrade} · ${room.internalGrade}</span><em>${room.staffUnread || 0}</em><small>${room.lastMessage || "새 상담"}</small>
   </button>`).join("") || "<p class='empty'>상담방이 없습니다.</p>";
-  $$("[data-room]", list).forEach((btn) => btn.addEventListener("click", () => {
-    activeRoom = btn.dataset.room;
-    loadStaffMessages();
-    loadStaffRooms();
-  }));
 }
 
 async function loadStaffMessages() {
@@ -464,7 +633,8 @@ async function loadStaffMessages() {
   const log = $("#staffMessages");
   log.innerHTML = messages.map((m) => {
     const deleted = m.deletedByMember ? "<em class=\"deleted-note\">(삭제)</em>" : "";
-    const image = m.attachment ? `<img class="chat-image" src="${escapeAttr(m.attachment.dataUrl)}" alt="${escapeAttr(m.attachment.name)}">` : "";
+    if (m.attachment) chatImageSources.set(m.id, { src: m.attachment.dataUrl, name: m.attachment.name });
+    const image = m.attachment ? `<button type="button" class="chat-image-link" data-chat-image-id="${escapeAttr(m.id)}"><img class="chat-image" src="${escapeAttr(m.attachment.dataUrl)}" alt="${escapeAttr(m.attachment.name)}"></button>` : "";
     const read = m.senderType === "staff" && m.read ? "<small class=\"read-receipt\">읽음</small>" : "";
     return `<p class="${m.senderType}" data-message-id="${escapeAttr(m.id)}"><b>${escapeHtml(m.displayName)}${m.internalStaffName ? ` (${escapeHtml(m.internalStaffName)})` : ""}</b><button class="staff-message-delete" type="button" data-staff-message-delete="${escapeAttr(m.id)}" aria-label="메시지 삭제">삭제</button><span>${escapeHtml(m.message || "")}${deleted}</span>${image}${read}</p>`;
   }).join("");
@@ -472,6 +642,23 @@ async function loadStaffMessages() {
 }
 
 if (document.body.dataset.page === "staff") {
+  const staffForm = $("#staffSend");
+  const staffInput = staffForm?.message;
+  const staffFileInput = $("#staffChatFileInput");
+  const staffAttachmentPreview = $("#staffChatAttachmentPreview");
+  let selectedStaffAttachment = null;
+  const clearStaffAttachment = () => {
+    selectedStaffAttachment = null;
+    if (staffFileInput) staffFileInput.value = "";
+    if (staffAttachmentPreview) staffAttachmentPreview.innerHTML = "";
+  };
+  $("#staffRooms")?.addEventListener("click", (event) => {
+    const roomButton = event.target.closest("[data-room]");
+    if (!roomButton) return;
+    activeRoom = roomButton.dataset.room;
+    loadStaffMessages();
+    loadStaffRooms();
+  });
   document.addEventListener("click", async (event) => {
     const deleteButton = event.target.closest("[data-staff-message-delete]");
     if (deleteButton && activeRoom) {
@@ -490,12 +677,41 @@ if (document.body.dataset.page === "staff") {
       loadStaffRooms();
     }
   });
-  $("#staffSend")?.addEventListener("submit", async (event) => {
+  $("#staffChatAttach")?.addEventListener("click", () => staffFileInput?.click());
+  staffFileInput?.addEventListener("change", () => {
+    const file = staffFileInput.files?.[0];
+    if (!file) return clearStaffAttachment();
+    if (!file.type.startsWith("image/")) {
+      alert("사진 파일만 첨부할 수 있습니다.");
+      return clearStaffAttachment();
+    }
+    if (file.size > 3 * 1024 * 1024) {
+      alert("사진은 3MB 이하만 첨부할 수 있습니다.");
+      return clearStaffAttachment();
+    }
+    const reader = new FileReader();
+    reader.addEventListener("load", () => {
+      selectedStaffAttachment = { name: file.name, type: file.type, size: file.size, dataUrl: reader.result };
+      if (staffAttachmentPreview) {
+        staffAttachmentPreview.innerHTML = `<img src="${escapeAttr(reader.result)}" alt=""><span>${escapeHtml(file.name)}</span><button type="button" aria-label="첨부 삭제">×</button>`;
+        $("button", staffAttachmentPreview)?.addEventListener("click", clearStaffAttachment);
+      }
+    });
+    reader.readAsDataURL(file);
+  });
+  staffInput?.addEventListener("keydown", (event) => {
+    if (event.key !== "Enter" || event.isComposing) return;
+    event.preventDefault();
+    staffForm?.requestSubmit();
+  });
+  staffForm?.addEventListener("submit", async (event) => {
     event.preventDefault();
     if (!activeRoom) return;
     const input = event.currentTarget.message;
-    await post(`/api/chat/staff/${activeRoom}`, { message: input.value });
+    if (!input.value.trim() && !selectedStaffAttachment) return;
+    await post(`/api/chat/staff/${activeRoom}`, { message: input.value, attachment: selectedStaffAttachment });
     input.value = "";
+    clearStaffAttachment();
     loadStaffMessages();
     loadStaffRooms();
   });

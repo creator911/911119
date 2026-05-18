@@ -1,5 +1,5 @@
 import http from "node:http";
-import { readFile, writeFile, mkdir, stat, copyFile } from "node:fs/promises";
+import { readFile, writeFile, mkdir, stat, copyFile, rename, rm } from "node:fs/promises";
 import { createReadStream, existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 import crypto from "node:crypto";
@@ -17,6 +17,8 @@ const DATA_DIR = path.join(__dirname, "data");
 const DB_PATH = path.join(DATA_DIR, "db.json");
 const PUBLIC_SEED_PATH = path.join(DATA_DIR, "public-seed.json");
 const PUBLIC_DIR = path.join(__dirname, "public");
+const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+let dbWriteQueue = Promise.resolve();
 
 const DISPLAY_GRADES = ["브론즈", "실버", "골드", "플레티넘", "다이아", "마스터", "챌린저"];
 const MEMBER_GRADES = ["브론즈", "실버", "골드", "플레티넘", "다이아"];
@@ -53,6 +55,50 @@ function initialGroupFor(name = "") {
   if (!first) return "1~A";
   if (first >= 0xac00 && first <= 0xd7a3) return INITIAL_FILTERS[Math.floor((first - 0xac00) / 588)] || "1~A";
   return /^[0-9a-z]/i.test(String.fromCodePoint(first)) ? "1~A" : "1~A";
+}
+
+const SEARCH_INITIALS = ["ㄱ", "ㄲ", "ㄴ", "ㄷ", "ㄸ", "ㄹ", "ㅁ", "ㅂ", "ㅃ", "ㅅ", "ㅆ", "ㅇ", "ㅈ", "ㅉ", "ㅊ", "ㅋ", "ㅌ", "ㅍ", "ㅎ"];
+function searchInitials(value = "") {
+  return [...String(value)].map((char) => {
+    const code = char.codePointAt(0);
+    if (code >= 0xac00 && code <= 0xd7a3) return SEARCH_INITIALS[Math.floor((code - 0xac00) / 588)] || "";
+    return /[0-9a-z]/i.test(char) ? char.toLowerCase() : "";
+  }).join("");
+}
+
+function normalizeSearch(value = "") {
+  return String(value).toLowerCase().replace(/\s+/g, "");
+}
+
+function searchGameResults(db, query = "") {
+  const q = normalizeSearch(query);
+  const games = (db.games || []).filter((game) => game.visible !== false);
+  const ranked = games.slice().sort((a, b) => Number(a.rank || 9999) - Number(b.rank || 9999));
+  const filtered = q ? ranked.filter((game) => {
+    const name = normalizeSearch(game.name);
+    const initials = searchInitials(game.name);
+    const group = normalizeSearch(game.initialGroup);
+    return name.includes(q) || initials.includes(q) || group === q;
+  }).sort((a, b) => {
+    const aName = normalizeSearch(a.name);
+    const bName = normalizeSearch(b.name);
+    const aInitials = searchInitials(a.name);
+    const bInitials = searchInitials(b.name);
+    const score = (game, name, initials) => (
+      name === q ? 0 :
+      name.startsWith(q) ? 1 :
+      initials === q ? 2 :
+      initials.startsWith(q) ? 3 :
+      name.includes(q) ? 4 : 5
+    ) + Number(game.rank || 9999) / 10000;
+    return score(a, aName, aInitials) - score(b, bName, bInitials);
+  }) : ranked;
+  return filtered.slice(0, 10).map((game) => ({
+    name: game.name,
+    slug: game.slug,
+    imageUrl: game.imageUrl || game.localImageUrl || "/assets/games/game-1.svg",
+    initialGroup: game.initialGroup || initialGroupFor(game.name)
+  }));
 }
 
 function readPublicSeed() {
@@ -107,9 +153,13 @@ async function readDb() {
     const normalized = normalizeDb(db);
     if (normalized.changed) await writeDb(normalized.db);
     return normalized.db;
-  } catch {
-    await seedDb();
-    return JSON.parse(await readFile(DB_PATH, "utf8"));
+  } catch (error) {
+    if (error?.code === "ENOENT") {
+      await seedDb();
+      return JSON.parse(await readFile(DB_PATH, "utf8"));
+    }
+    console.error("DB read failed; keeping existing db.json untouched.", error);
+    throw error;
   }
 }
 
@@ -213,17 +263,43 @@ function normalizeDb(db) {
   return { db, changed };
 }
 
-async function writeDb(db) {
+async function retryBusy(task, attempts = 5) {
+  for (let attempt = 0; attempt < attempts; attempt += 1) {
+    try {
+      return await task();
+    } catch (error) {
+      if (!["EBUSY", "EPERM"].includes(error?.code) || attempt === attempts - 1) throw error;
+      await wait(80 * (attempt + 1));
+    }
+  }
+}
+
+async function writeDbPayload(payload) {
   await mkdir(DATA_DIR, { recursive: true });
   try {
     await copyFile(DB_PATH, path.join(DATA_DIR, "db.backup.json"));
     await copyFile(DB_PATH, path.join(DATA_DIR, `db.backup-${Date.now()}.json`));
   } catch {}
-  await writeFile(DB_PATH, JSON.stringify(db, null, 2), "utf8");
+  const tempPath = path.join(DATA_DIR, `db.${process.pid}.${Date.now()}.tmp`);
+  try {
+    await writeFile(tempPath, payload, "utf8");
+    await retryBusy(() => copyFile(tempPath, DB_PATH));
+    await rm(tempPath, { force: true });
+  } catch (error) {
+    await rm(tempPath, { force: true }).catch(() => {});
+    throw error;
+  }
+}
+
+async function writeDb(db) {
+  const payload = JSON.stringify(db, null, 2);
+  dbWriteQueue = dbWriteQueue.catch(() => {}).then(() => writeDbPayload(payload));
+  return dbWriteQueue;
 }
 
 async function seedDb() {
   await mkdir(DATA_DIR, { recursive: true });
+  if (existsSync(DB_PATH)) return;
   const ownerId = id("user");
   const seed = readPublicSeed();
   const seededPosts = publicSeedPosts(seed, ownerId);
@@ -431,6 +507,37 @@ function tradeCollection(db, type) {
   return type === "sell" ? db.sellPosts || [] : db.buyPosts || [];
 }
 
+function tradeTypeLabel(type = "sell") {
+  return type === "sell" ? "판매" : "구매";
+}
+
+function tradeHref(post, type = post.type || "sell") {
+  return `/trades/${type}/${encodeURIComponent(post.id)}`;
+}
+
+function tradeStatusClass(status = "") {
+  if (status === "거래완료" || status.includes("완료")) return "done";
+  if (status.includes("진행")) return "active";
+  return "";
+}
+
+function tradeStatusLabel(status = "", type = "sell") {
+  const compact = String(status || "").replace(/\s/g, "");
+  if (compact === "판매중" || compact === "구매중") return "";
+  if (compact === "구매진행중") return "구매 진행중";
+  if (compact === "판매진행중") return "판매 진행중";
+  if (compact === "거래완료") return type === "buy" ? "구매완료" : "판매완료";
+  if (compact === "구매완료") return "구매완료";
+  if (compact === "판매완료") return "판매완료";
+  return status;
+}
+
+function findTradePost(db, type, idValue) {
+  const safeType = type === "buy" ? "buy" : "sell";
+  const post = tradeCollection(db, safeType).find((item) => item.id === idValue);
+  return post ? { post, type: safeType } : null;
+}
+
 function allTrades(db) {
   return [...(db.sellPosts || []).map((post) => ({ ...post, type: "sell" })), ...(db.buyPosts || []).map((post) => ({ ...post, type: "buy" }))];
 }
@@ -538,7 +645,7 @@ function marketControlPanel(game, selected = {}) {
   </section>`;
 }
 
-function tradeComposePage(user, type, db, selectedSlug = "") {
+function legacyTradeComposePage(user, type, db, selectedSlug = "") {
   const sell = type === "sell";
   const games = (db.games || []).filter((game) => game.visible !== false);
   const selectedGame = games.find((game) => game.slug === selectedSlug) || games[0] || {};
@@ -600,6 +707,176 @@ function tradeComposePage(user, type, db, selectedSlug = "") {
   </main>${chatWidget(user)}`, "trade");
 }
 
+function renderTradeCard(post, db, owner = false) {
+  const member = db.users?.find((item) => item.id === post.userId);
+  const sideLabel = tradeTypeLabel(post.type);
+  const statusOptions = post.type === "sell" ? ["판매중", "구매 진행중", "구매완료", "숨김"] : ["구매중", "판매 진행중", "판매완료", "숨김"];
+  const status = post.status || (post.type === "sell" ? "판매중" : "구매중");
+  const displayStatus = tradeStatusLabel(status, post.type);
+  return `<article class="trade-card" data-trade-card>
+    <a class="trade-card__link" href="${tradeHref(post)}" aria-label="${esc(post.title || "거래글")} 상세보기"></a>
+    <div class="trade-card__meta"><span class="${post.type}">${sideLabel}</span><b>${esc(tradeKindLabel(post.tradeKind || post.category))}</b><b>${esc(post.unit || "일반")}</b>${displayStatus ? `<em class="${tradeStatusClass(displayStatus)}">[${esc(displayStatus)}]</em>` : ""}</div>
+    <h3>${esc(post.title || "제목 없음")}</h3>
+    <p>${esc(post.gameName || post.game)} · ${esc(post.server || "서버전체")}</p>
+    <strong>${won(post.price)}</strong>
+    <small>${esc(member?.nickname || "회원")} · ${new Date(post.createdAt).toLocaleDateString("ko-KR")}</small>
+    ${owner ? `<label class="status-update">상태<select data-trade-status="${esc(post.id)}" data-trade-type="${post.type}">${statusOptions.map((item) => `<option ${item === status ? "selected" : ""}>${item}</option>`).join("")}</select></label>` : ""}
+  </article>`;
+}
+
+function tradeComposePage(user, type, db, selectedSlug = "") {
+  const sell = type === "sell";
+  const games = (db.games || []).filter((game) => game.visible !== false);
+  const selectedGame = games.find((game) => game.slug === selectedSlug) || games[0] || {};
+  const gameOptions = games.map((game) => `<option value="${esc(game.slug)}" ${game.slug === selectedGame.slug ? "selected" : ""}>${esc(game.name)}</option>`).join("");
+  const servers = gameServerList(selectedGame);
+  const tradeKinds = gameTradeKinds(selectedGame);
+  const sellUnits = gameFilterList(selectedGame).find((filter) => filter.label === "판매 단위")?.values || ["일반", "분할"];
+  const title = sell ? "판매등록" : "구매등록";
+  return layout(title, user, `<main class="trade-compose-page" ${gameThemeStyle(selectedGame)}>
+    <form class="trade-compose" data-form="${sell ? "sell" : "buy"}">
+      <section class="trade-compose__hero">
+        <img src="${gameImage(selectedGame)}" alt="">
+        <div><p>${sell ? "판매할 게임 자산을 등록합니다" : "구매하고 싶은 조건을 등록합니다"}</p><h1>${title}</h1><span>${esc(selectedGame.name || "게임 선택")}</span></div>
+        <a href="/games/${encodeURIComponent(selectedGame.slug || "")}">거래목록</a>
+      </section>
+      <section class="trade-compose__body">
+        <div class="compose-field full">
+          <b>게임</b>
+          <select name="gameSlug" required>${gameOptions}</select>
+        </div>
+        <div class="compose-field full">
+          <b>구분</b>
+          <div class="segmented">${tradeKinds.map((item, index) => `<label><input type="radio" name="tradeKind" value="${esc(item)}" ${index === 0 ? "checked" : ""}><span>${esc(item)}</span></label>`).join("")}</div>
+        </div>
+        <div class="compose-field full">
+          <b>서버</b>
+          <div class="chip-grid">${servers.map((item, index) => `<label><input type="radio" name="server" value="${esc(item)}" ${index === 0 ? "checked" : ""}><span>${esc(item)}</span></label>`).join("")}</div>
+        </div>
+        <div class="compose-field compose-field--unit">
+          <b>${sell ? "판매 단위" : "구매 단위"}</b>
+          <div class="segmented compact">${sellUnits.map((item, index) => `<label><input type="radio" name="unit" value="${esc(item)}" ${index === 0 ? "checked" : ""}><span>${esc(item)}</span></label>`).join("")}</div>
+        </div>
+        <div class="compose-field compose-field--price">
+          <b>가격</b>
+          <div class="price-entry"><input name="price" type="number" min="0" step="1000" placeholder="${sell ? "판매 가격" : "희망 가격"}" required><span>원</span></div>
+          <div class="price-presets"><button type="button" data-price-preset="1000000">100만원</button><button type="button" data-price-preset="2000000">200만원</button><button type="button" data-price-preset="5000000">500만원</button><button type="button" data-price-preset="10000000">1000만원</button></div>
+        </div>
+        <div class="compose-field compose-field--quantity">
+          <b>캐릭터/수량</b>
+          <div class="quantity-stack"><input name="characterName" placeholder="캐릭터명 또는 품목명"><input name="quantity" type="number" min="1" step="1" placeholder="수량"></div>
+        </div>
+        <div class="compose-field full">
+          <b>제목</b>
+          <input name="title" placeholder="제목을 입력해주세요." required>
+        </div>
+        <div class="compose-field full compose-field--editor">
+          <b>내용</b>
+          <div class="trade-editor-wrap">
+            <div class="notice-editor-toolbar trade-editor-toolbar">
+              <select data-trade-font><option value="Malgun Gothic">맑은 고딕</option><option value="serif">명조</option><option value="monospace">고정폭</option></select>
+              <select data-trade-size><option>14</option><option selected>16</option><option>18</option><option>20</option><option>24</option></select>
+              <select data-trade-weight><option value="400">보통</option><option value="700">굵게</option><option value="900">아주 굵게</option></select>
+              <button type="button" data-trade-apply>선택 텍스트 적용</button>
+              <button type="button" data-trade-image>사진첨부</button>
+              <input type="file" accept="image/*" data-trade-file hidden>
+            </div>
+            <div class="notice-rich-editor trade-rich-editor" contenteditable="true" data-trade-editor aria-label="거래글 내용 편집기"><p>거래 조건, 연락 가능 시간, 확인이 필요한 정보를 적어주세요.</p></div>
+            <input type="hidden" name="description">
+            <input type="hidden" name="descriptionText">
+          </div>
+        </div>
+      </section>
+      <section class="trade-compose__actions"><a href="/games">취소</a><button>${sell ? "판매글 등록" : "구매글 등록"}</button><p class="form-message"></p></section>
+    </form>
+  </main>${chatWidget(user)}`, "trade");
+}
+
+function tradeDetailPage(user, db, type, postId) {
+  const found = findTradePost(db, type, postId);
+  if (!found) return layout("거래글 없음", user, `<main class="trade-detail-page"><section class="trade-detail-card"><h1>거래글을 찾을 수 없습니다.</h1><a class="notice-list-button" href="/games">목록</a></section>${chatWidget(user)}</main>`, "trade");
+  const { post } = found;
+  const member = db.users?.find((item) => item.id === post.userId);
+  const game = db.games?.find((item) => item.slug === post.gameSlug);
+  const status = post.status || (type === "sell" ? "판매중" : "구매중");
+  const displayStatus = tradeStatusLabel(status, type);
+  const statusKey = String(status || "").replace(/\s/g, "");
+  const isOwner = user?.id === post.userId;
+  const canStart = user && !isOwner && ((type === "sell" && status === "판매중") || (type === "buy" && status === "구매중"));
+  const isProgressing = type === "sell" ? statusKey === "구매진행중" : statusKey === "판매진행중";
+  const canComplete = user && post.counterpartyId === user.id && isProgressing;
+  const actionLabel = type === "sell" ? "구매요청하기" : "판매요청하기";
+  const completeLabel = type === "sell" ? "구매완료" : "판매완료";
+  const sideLabel = type === "sell" ? "팝니다" : "삽니다";
+  const amountLabel = type === "sell" ? "판매금액" : "구매금액";
+  const quantityLabel = type === "sell" ? "판매수량" : "구매수량";
+  const memberTitle = type === "sell" ? "판매자 정보" : "구매자 정보";
+  const itemName = post.characterName || post.unit || tradeKindLabel(post.tradeKind || post.category);
+  const quantity = post.quantity ? `${post.quantity}개` : "1개";
+  const detailId = String(post.id || "").split("_").pop()?.slice(0, 8) || post.id;
+  const bodyHtml = noticeBodyHtml(post.descriptionHtml || post.description || post.descriptionText || "");
+  return layout(post.title || "거래글", user, `<main class="trade-detail-page" ${gameThemeStyle(game)}>
+    <div class="trade-detail-shell">
+      <section class="trade-detail-card">
+        <header class="trade-detail-head">
+          <div>
+            <a href="/games/${encodeURIComponent(post.gameSlug || "")}">← 목록</a>
+            <p><strong class="${type}">${sideLabel}</strong><span>${esc(post.gameName || post.game || "-")} &gt; ${esc(post.server || "서버전체")}</span></p>
+          </div>
+          ${displayStatus ? `<em class="${tradeStatusClass(displayStatus)}">[${esc(displayStatus)}]</em>` : ""}
+        </header>
+        <h1>${esc(post.title || "제목 없음")}</h1>
+        <div class="trade-detail-code"><span>#${esc(detailId)}</span><time>${new Date(post.createdAt).toLocaleString("ko-KR")}</time></div>
+        <dl class="trade-detail-summary" aria-label="거래 요약">
+          <div><dt>${quantityLabel}</dt><dd>${esc(quantity)}</dd></div>
+          <div><dt>${amountLabel}</dt><dd>${won(post.price)}</dd></div>
+          <div><dt>품목명</dt><dd>${esc(itemName || "-")}</dd></div>
+        </dl>
+        <section class="trade-detail-section">
+          <h2>거래 정보</h2>
+          <dl class="trade-detail-info-grid">
+            <div><dt>게임</dt><dd>${esc(post.gameName || post.game || "-")}</dd></div>
+            <div><dt>서버</dt><dd>${esc(post.server || "서버전체")}</dd></div>
+            <div><dt>분류</dt><dd>${esc(tradeKindLabel(post.tradeKind || post.category))}</dd></div>
+            <div><dt>단위</dt><dd>${esc(post.unit || "일반")}</dd></div>
+            <div><dt>캐릭터명 또는 품목명</dt><dd>${esc(post.characterName || "-")}</dd></div>
+            ${displayStatus ? `<div><dt>거래 상태</dt><dd>${esc(displayStatus)}</dd></div>` : ""}
+          </dl>
+        </section>
+        <section class="trade-detail-section">
+          <div class="trade-detail-section-head"><h2>${memberTitle}</h2><span>거래사기 피해이력 조회</span></div>
+          <div class="trade-member-card">
+            <b>${esc((member?.displayGrade || "브론즈").slice(0, 1))}</b>
+            <strong>${esc(member?.displayGrade || "브론즈")}</strong>
+            <span>${esc(member?.nickname || "회원")}</span>
+          </div>
+        </section>
+        <section class="trade-detail-section trade-detail-section--body">
+          <h2>물품 상세 정보</h2>
+          <article class="trade-detail-body">${bodyHtml || "<p>등록된 상세 내용이 없습니다.</p>"}</article>
+        </section>
+      </section>
+      <aside class="trade-detail-action">
+        <dl>
+          <div><dt>${amountLabel}</dt><dd>${won(post.price)}</dd></div>
+          <div><dt>내 마일리지</dt><dd>${user ? won(user.points) : "로그인 필요"}</dd></div>
+        </dl>
+        <div class="trade-detail-buttons">
+          <button type="button" class="trade-detail-chat" data-open-chat>채팅</button>
+          ${canStart ? `<button type="button" class="trade-detail-request" data-trade-action="${type}" data-trade-id="${esc(post.id)}">${actionLabel}</button>` : ""}
+          ${canComplete ? `<button type="button" class="trade-detail-request" data-trade-complete="${type}" data-trade-id="${esc(post.id)}">${completeLabel}</button>` : ""}
+          ${!user && !displayStatus ? `<a class="trade-detail-request" href="/login">${actionLabel}</a>` : ""}
+          ${user && isOwner && isProgressing ? `<em>상대방 완료 확정 대기중</em>` : ""}
+          ${user && isOwner && !isProgressing ? `<em>내가 등록한 글입니다.</em>` : ""}
+          ${user && !isOwner && !canStart && !canComplete ? `<em>${esc(displayStatus || status)}</em>` : ""}
+          ${!user && displayStatus ? `<em>${esc(displayStatus)}</em>` : ""}
+        </div>
+      </aside>
+    </div>
+    ${chatWidget(user)}
+  </main>`, "trade");
+}
+
 function layout(title, user, content, page = "home") {
   return `<!doctype html>
 <html lang="ko">
@@ -637,12 +914,9 @@ function header(user) {
         </div>
         <div class="search-field">
           <input id="globalSearch" placeholder="게임명 또는 물품명을 검색하세요" autocomplete="off">
-          <div class="suggest-panel">
-            <b>추천 검색어</b>
-            <span>메이플스토리월드</span><span>리니지2</span><span>아이온2</span><span>로스트아크</span>
-          </div>
+          <div class="suggest-panel" id="globalSuggest" aria-label="추천 검색어"></div>
         </div>
-        <button class="search-icon" type="button" aria-label="검색"><img src="/assets/header/search-icon.png" alt=""></button>
+        <button class="search-icon" type="submit" aria-label="검색"><img src="/assets/header/search-icon.png" alt=""></button>
       </form>
       <nav class="account">
         ${user ? `<b>${user.nickname}</b><span>${user.displayGrade}</span><a href="/mypage">마이페이지</a><button data-action="logout">로그아웃</button>` : `<a class="account-image-link" href="/login" aria-label="로그인"><img src="/assets/header/login-button.png" alt="로그인"></a><a class="account-image-link" href="/signup" aria-label="회원가입"><img src="/assets/header/signup-button.png" alt="회원가입"></a>`}
@@ -886,7 +1160,7 @@ function gameDetailPage(user, db, slug, filters = {}) {
   </main>`, "games");
 }
 
-function renderTradeCard(post, db, owner = false) {
+function legacySimpleRenderTradeCard(post, db, owner = false) {
   const member = db.users?.find((user) => user.id === post.userId);
   const sideLabel = post.type === "sell" ? "판매" : "구매";
   const statusOptions = post.type === "sell" ? ["판매중", "판매완료", "숨김"] : ["구매중", "구매완료", "숨김"];
@@ -951,7 +1225,7 @@ function pointPage(user, db, type) {
     <aside class="mileage-request-panel">
       <form class="mileage-form" data-form="${type}" data-balance="${balance}">
         <h2>${charge ? "결제 상품" : "보유 마일리지"}</h2>
-        ${charge ? `<h3>충전전용계좌 충전</h3>` : `<div class="mileage-balance-box"><p><span>출금 불가 마일리지</span><b>0원</b></p><p><span>팜크레딧</span><b>0원</b></p><p><span>출금 가능 마일리지</span><b>${won(balance)}</b></p></div>`}
+        ${charge ? `<h3>충전전용계좌 충전</h3>` : `<div class="mileage-balance-box"><p><span>출금 불가 마일리지</span><b>0원</b></p><p><span>출금 가능 마일리지</span><b>${won(balance)}</b></p></div>`}
         <label>${charge ? "충전 신청 금액" : "출금 신청 금액"} ${!charge ? "<small>회원명/예금주명 동일</small>" : ""}<input name="amount" type="number" min="${charge ? "1000" : "2000"}" step="1000" placeholder="${charge ? "" : "최소 2,000원 이상 입력"}" required></label>
         <div class="amount-presets">${presets.map(([value, label]) => `<button type="button" data-point-amount="${esc(value)}">${esc(label)}</button>`).join("")}</div>
         <dl class="mileage-summary">
@@ -988,7 +1262,7 @@ function myPage(user, db) {
   const tradeRows = (posts, emptyText) => {
     const rows = posts.slice().sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt))).map((post) => {
       const status = tradeStatus(post);
-      return `<a class="mypage-trade-row" href="/games/${encodeURIComponent(post.gameSlug || "")}">
+      return `<a class="mypage-trade-row" href="${tradeHref(post)}">
         <span class="mypage-trade-title">${esc(post.title || "제목 없음")}</span>
         <small>${esc(post.gameName || post.game || "게임")} · ${esc(post.server || "서버전체")}</small>
         <b>${won(post.price)}</b>
@@ -1082,7 +1356,7 @@ function adminPage(user, db) {
 function staffPage(user) {
   return layout("상담사", user, `<main class="staff-page">
     <aside class="chat-list"><h1>상담함 <span id="roomCount">0</span></h1><div id="staffRooms"></div></aside>
-    <section class="staff-chat"><div class="room-meta"><span id="staffRoomMeta">상담방을 선택하세요.</span><button type="button" id="staffClearRoom" disabled>채팅방 비우기</button></div><div id="staffMessages" class="chat-log"></div><form id="staffSend"><input name="message" placeholder="답변 입력"><button>전송</button></form></section>
+    <section class="staff-chat"><div class="room-meta"><span id="staffRoomMeta">상담방을 선택하세요.</span><button type="button" id="staffClearRoom" disabled>채팅방 비우기</button></div><div id="staffMessages" class="chat-log"></div><form id="staffSend" class="staff-send-form"><input id="staffChatFileInput" type="file" accept="image/*" hidden><input name="message" placeholder="답변 입력" autocomplete="off"><button type="button" id="staffChatAttach">사진</button><div id="staffChatAttachmentPreview" class="staff-attachment-preview"></div><button>전송</button></form></section>
   </main>`, "staff");
 }
 
@@ -1120,6 +1394,7 @@ function noticesPage(user, db, page = 1) {
 function noticeDetailPage(user, db, postId) {
   const post = (db.site?.posts || []).find((item) => item.id === postId);
   if (!post) return layout("공지사항", user, `<main class="notice-page"><h1>공지사항</h1><section class="notice-detail-card"><p>공지사항을 찾을 수 없습니다.</p></section><a class="notice-list-button" href="/notices">목록</a>${chatWidget(user)}</main>`, "notice");
+  const canDelete = user && ["ADMIN", "OWNER"].includes(user.role);
   return layout(post.title, user, `<main class="notice-page">
     <h1><a href="/notices">공지사항</a></h1>
     <article class="notice-detail-card">
@@ -1127,7 +1402,10 @@ function noticeDetailPage(user, db, postId) {
       <div class="notice-author"><span class="notice-author-icon">i</span><b>관리자</b><time>${noticeDate(post.createdAt, true)}</time></div>
       <div class="notice-body" style="${noticeContentStyle(post)}">${noticeBodyHtml(post.body)}</div>
     </article>
-    <a class="notice-list-button" href="/notices">☰ 목록</a>
+    <div class="notice-detail-actions">
+      <a class="notice-list-button" href="/notices">☰ 목록</a>
+      ${canDelete ? `<button type="button" class="notice-delete-button" data-notice-delete="${esc(post.id)}">삭제</button>` : ""}
+    </div>
     ${chatWidget(user)}
   </main>`, "notice");
 }
@@ -1160,6 +1438,10 @@ function chatWidget(user) {
 async function api(req, res, db, user, pathname) {
   try {
     const requestUrl = new URL(req.url, `http://${req.headers.host}`);
+    if (pathname === "/api/search-games" && req.method === "GET") {
+      const q = requestUrl.searchParams.get("q") || "";
+      return send(res, 200, { games: searchGameResults(db, q) });
+    }
     if (pathname === "/api/check-availability" && req.method === "GET") {
       const field = requestUrl.searchParams.get("field");
       const value = String(requestUrl.searchParams.get("value") || "").trim();
@@ -1199,9 +1481,47 @@ async function api(req, res, db, user, pathname) {
       const data = await body(req);
       const game = (db.games || []).find((item) => item.slug === data.gameSlug);
       if (!game) return send(res, 400, { error: "게임을 선택하세요." });
-      const row = { id: id(data.type), userId: user.id, gameSlug: game.slug, gameName: game.name, game: game.name, server: data.server || "서버전체", tradeKind: tradeKindLabel(data.tradeKind), category: tradeKindLabel(data.tradeKind), unit: data.unit || "일반", characterName: data.characterName || "", quantity: data.quantity ? Number(data.quantity) : null, title: data.title, description: data.description, price: Number(data.price), memo: data.memo, imageUrl: data.imageUrl, status: data.type === "sell" ? "판매중" : "구매중", createdAt: now() };
+      const descriptionHtml = sanitizeNoticeHtml(String(data.description || "").trim());
+      const descriptionText = String(data.descriptionText || "").trim();
+      const row = { id: id(data.type), userId: user.id, gameSlug: game.slug, gameName: game.name, game: game.name, server: data.server || "서버전체", tradeKind: tradeKindLabel(data.tradeKind), category: tradeKindLabel(data.tradeKind), unit: data.unit || "일반", characterName: data.characterName || "", quantity: data.quantity ? Number(data.quantity) : null, title: data.title, description: descriptionHtml, descriptionHtml, descriptionText, price: Number(data.price), status: data.type === "sell" ? "판매중" : "구매중", createdAt: now() };
       db[data.type === "sell" ? "sellPosts" : "buyPosts"].push(row); await writeDb(db);
       return send(res, 200, { ok: true });
+    }
+    if (pathname === "/api/trade/action" && req.method === "POST") {
+      if (!protect(user, "member")) return send(res, 401, { error: "로그인이 필요합니다." });
+      const data = await body(req);
+      const type = data.type === "buy" ? "buy" : "sell";
+      const collection = tradeCollection(db, type);
+      const post = collection.find((item) => item.id === data.id);
+      if (!post) return send(res, 404, { error: "거래글을 찾을 수 없습니다." });
+      if (post.userId === user.id) return send(res, 403, { error: "본인이 등록한 글입니다." });
+      const openStatus = type === "sell" ? "판매중" : "구매중";
+      const nextStatus = type === "sell" ? "구매 진행중" : "판매 진행중";
+      const status = post.status || openStatus;
+      if (status !== openStatus) return send(res, 400, { error: "이미 진행 중이거나 완료된 거래입니다." });
+      post.status = nextStatus;
+      post.counterpartyId = user.id;
+      post.updatedAt = now();
+      await writeDb(db);
+      return send(res, 200, { ok: true, status: nextStatus });
+    }
+    if (pathname === "/api/trade/complete" && req.method === "POST") {
+      if (!protect(user, "member")) return send(res, 401, { error: "로그인이 필요합니다." });
+      const data = await body(req);
+      const type = data.type === "buy" ? "buy" : "sell";
+      const collection = tradeCollection(db, type);
+      const post = collection.find((item) => item.id === data.id);
+      if (!post) return send(res, 404, { error: "거래글을 찾을 수 없습니다." });
+      if (post.counterpartyId !== user.id) return send(res, 403, { error: "거래 요청자만 완료할 수 있습니다." });
+      const statusKey = String(post.status || "").replace(/\s/g, "");
+      const expectedStatus = type === "sell" ? "구매진행중" : "판매진행중";
+      if (statusKey !== expectedStatus) return send(res, 400, { error: "진행 중인 거래만 완료할 수 있습니다." });
+      post.status = type === "sell" ? "구매완료" : "판매완료";
+      post.completedBy = user.id;
+      post.completedAt = now();
+      post.updatedAt = now();
+      await writeDb(db);
+      return send(res, 200, { ok: true, status: post.status });
     }
     if (pathname === "/api/trade/status" && req.method === "POST") {
       if (!protect(user, "member")) return send(res, 401, { error: "로그인이 필요합니다." });
@@ -1210,7 +1530,7 @@ async function api(req, res, db, user, pathname) {
       const post = collection.find((item) => item.id === data.id);
       if (!post) return send(res, 404, { error: "거래글을 찾을 수 없습니다." });
       if (post.userId !== user.id && !canAdmin(user)) return send(res, 403, { error: "권한이 없습니다." });
-      const allowed = data.type === "sell" ? ["판매중", "판매완료", "숨김"] : ["구매중", "구매완료", "숨김"];
+      const allowed = data.type === "sell" ? ["판매중", "구매 진행중", "구매진행중", "구매완료", "판매완료", "숨김"] : ["구매중", "판매 진행중", "판매진행중", "판매완료", "구매완료", "숨김"];
       if (!allowed.includes(data.status)) return send(res, 400, { error: "상태값을 확인하세요." });
       post.status = data.status;
       post.updatedAt = now();
@@ -1256,6 +1576,16 @@ async function api(req, res, db, user, pathname) {
         createdAt: noticeCreatedAt(data.createdAt)
       });
       audit(db, user, "NOTICE_CREATE");
+      await writeDb(db);
+      return send(res, 200, { ok: true });
+    }
+    if (pathname === "/api/admin/notice/delete" && req.method === "POST") {
+      if (!user || !["ADMIN", "OWNER"].includes(user.role)) return send(res, 403, { error: "권한이 없습니다." });
+      const data = await body(req);
+      const before = db.site.posts.length;
+      db.site.posts = db.site.posts.filter((post) => post.id !== data.id);
+      if (db.site.posts.length === before) return send(res, 404, { error: "공지사항을 찾을 수 없습니다." });
+      audit(db, user, "NOTICE_DELETE", data.id);
       await writeDb(db);
       return send(res, 200, { ok: true });
     }
@@ -1441,6 +1771,10 @@ async function router(req, res) {
   if (url.pathname === "/notices") return send(res, 200, noticesPage(user, db, url.searchParams.get("page") || 1));
   if (url.pathname.startsWith("/notices/")) return send(res, 200, noticeDetailPage(user, db, decodeURIComponent(url.pathname.split("/").pop())));
   if (url.pathname === "/games") return send(res, 200, gamesPage(user, db, url.searchParams.get("group") || "전체"));
+  if (url.pathname.startsWith("/trades/")) {
+    const [, , type, postId] = url.pathname.split("/");
+    if ((type === "sell" || type === "buy") && postId) return send(res, 200, tradeDetailPage(user, db, type, decodeURIComponent(postId)));
+  }
   if (url.pathname.startsWith("/games/")) {
     const panelFilters = {};
     url.searchParams.forEach((value, key) => {
