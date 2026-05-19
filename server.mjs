@@ -1859,7 +1859,7 @@ function noticeDetailPage(user, db, postId) {
 
 function chatWidget(user) {
   if (!user) return `<a class="direct-chat-fab locked" href="/login" aria-label="개인채팅"><img class="direct-chat-icon direct-chat-icon-green" src="/assets/chat/direct-chat-green.png" alt=""></a><a class="chat-fab locked" href="/login" aria-label="상담사연결"><img class="support-icon-blue" src="/assets/icons/chat-support.png" alt=""></a>`;
-  return `<button class="direct-chat-fab" id="directChatOpen" aria-label="개인채팅" aria-expanded="false"><img class="direct-chat-icon direct-chat-icon-green" src="/assets/chat/direct-chat-green.png" alt=""><img class="direct-chat-icon direct-chat-icon-red" src="/assets/chat/direct-chat-red.png" alt=""><em>×</em></button>
+  return `<button class="direct-chat-fab" id="directChatOpen" aria-label="개인채팅" aria-expanded="false"><img class="direct-chat-icon direct-chat-icon-green" src="/assets/chat/direct-chat-green.png" alt=""><img class="direct-chat-icon direct-chat-icon-red" src="/assets/chat/direct-chat-red.png" alt=""><em>×</em><span class="fab-unread-count" data-direct-unread-count hidden>0</span></button>
   <section class="direct-chat-widget" id="directChatWidget" aria-label="개인 채팅">
     <header class="direct-chat-head">
       <button type="button" id="directChatBack" class="direct-chat-back" aria-label="채팅방 목록">‹</button>
@@ -1878,7 +1878,7 @@ function chatWidget(user) {
       </div>
     </form>
   </section>
-  <button class="chat-fab" id="chatOpen" aria-label="상담사연결" aria-expanded="false"><img class="support-icon-blue" src="/assets/icons/chat-support.png" alt=""><img class="support-icon-red" src="/assets/icons/chat-support-red.png" alt=""><span>×</span></button>
+  <button class="chat-fab" id="chatOpen" aria-label="상담사연결" aria-expanded="false"><img class="support-icon-blue" src="/assets/icons/chat-support.png" alt=""><img class="support-icon-red" src="/assets/icons/chat-support-red.png" alt=""><span>×</span><i class="fab-unread-count" data-support-unread-count hidden>0</i></button>
   <section class="chat-widget" id="chatWidget" aria-label="아이템존 고객센터">
     <header class="member-chat-head">
       <img class="chat-agent-mark" src="/assets/chat/customer-center-agent.png" alt="">

@@ -24,6 +24,19 @@ function messageHtml(value) {
   return escapeHtml(value).replace(/\n/g, "<br>");
 }
 
+function unreadLabel(count = 0) {
+  const value = Number(count || 0);
+  if (value <= 0) return "";
+  return value > 99 ? "99+" : String(value);
+}
+
+function setUnreadBadge(target, count = 0) {
+  if (!target) return;
+  const label = unreadLabel(count);
+  target.textContent = label || "0";
+  target.hidden = !label;
+}
+
 function showTopMessage(text, tone = "buy") {
   if (!text) return;
   let toast = $("#topMessage");
@@ -982,7 +995,9 @@ async function loadMemberChat() {
 }
 
 function setMemberUnread(count = 0) {
-  chatOpen?.classList.toggle("has-unread", Number(count) > 0);
+  const value = Number(count || 0);
+  chatOpen?.classList.toggle("has-unread", value > 0);
+  setUnreadBadge($("[data-support-unread-count]", chatOpen), value);
 }
 
 async function loadMemberUnread() {
@@ -1047,7 +1062,9 @@ function directChatEmpty(text) {
 }
 
 function setDirectUnread(count = 0) {
-  directChatOpen?.classList.toggle("has-unread", Number(count) > 0);
+  const value = Number(count || 0);
+  directChatOpen?.classList.toggle("has-unread", value > 0);
+  setUnreadBadge($("[data-direct-unread-count]", directChatOpen), value);
 }
 
 function showDirectRoomList() {
@@ -1070,7 +1087,7 @@ async function loadDirectRooms() {
   if (!res.ok) return;
   const { rooms } = await res.json();
   setDirectUnread((rooms || []).reduce((sum, room) => sum + Number(room.unread || 0), 0));
-  directChatRooms.innerHTML = rooms.map((room) => `<button type="button" class="direct-room-row ${activeDirectRoom === room.id ? "active" : ""} ${room.systemOnly && Number(room.unread || 0) > 0 ? "system-unread" : ""}" data-direct-room="${escapeAttr(room.id)}">
+  directChatRooms.innerHTML = rooms.map((room) => `<button type="button" class="direct-room-row ${activeDirectRoom === room.id ? "active" : ""} ${Number(room.unread || 0) > 0 ? "has-unread" : ""} ${room.systemOnly && Number(room.unread || 0) > 0 ? "system-unread" : ""}" data-direct-room="${escapeAttr(room.id)}">
     <img src="${escapeAttr(room.systemOnly ? (room.peerGradeAsset || "/assets/tiers/master.png") : room.peerGradeAsset || "")}" alt="">
     <span>
       <b>${escapeHtml(room.peerNickname || "회원")}</b>
