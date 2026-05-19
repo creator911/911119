@@ -1055,6 +1055,12 @@ function mileageHistoryList(db, user, limit = 12, options = {}) {
   </li>`).join("");
 }
 
+function pointDeadlineText(value, minutes = 60) {
+  const base = new Date(value || Date.now());
+  const deadline = new Date(base.getTime() + minutes * 60 * 1000);
+  return `${deadline.toLocaleString("sv-SE", { timeZone: "Asia/Seoul" }).slice(0, 16)}까지`;
+}
+
 function tradeComposePage(user, type, db, selectedSlug = "") {
   const sell = type === "sell";
   const games = (db.games || []).filter((game) => game.visible !== false);
@@ -1565,6 +1571,9 @@ function pointPage(user, db, type) {
   const presets = [["50000", "+5만"], ["100000", "+10만"], ["500000", "+50만"]];
   const bankOptions = WITHDRAW_BANKS.map((bank) => `<option value="${esc(bank)}">${esc(bank)}</option>`).join("");
   const mileageList = mileageHistoryList(db, user, 12, { type, allowCancel: true });
+  const chargeAccount = db.site?.chargeAccount || {};
+  const pendingChargeRequest = charge ? (db.pointRequests || []).slice().reverse().find((row) => row.userId === user.id && row.type === "charge" && String(row.status || "대기") === "대기" && !row.hiddenFromMember) : null;
+  const chargeDeadline = pendingChargeRequest ? pointDeadlineText(pendingChargeRequest.createdAt, 60) : "";
   return layout(charge ? "마일리지충전" : "마일리지출금", user, `<main class="mileage-page ${charge ? "charge-page" : "withdraw-page"}">
     <section class="mileage-info-panel">
       <h1>${charge ? "충전전용계좌" : "본인 계좌 출금"}</h1>
@@ -1574,18 +1583,17 @@ function pointPage(user, db, type) {
         <article><i>↯</i><span>소요 시간</span><b>${charge ? "5분이내" : "30분 이내"}</b></article>
       </div>
       ${charge ? `<ul class="mileage-guide">
-        <li>충전 신청 후, 기재된 입금 계좌로 3시간내 입금해주세요.</li>
-        <li>충전 신청 금액과 입금 금액은 동일해야 합니다.</li>
-        <li>회원명과 입금자명이 동일해야 빠르게 확인됩니다.</li>
-        <li>운영진 확인 후 회원님의 아이템존 계정으로 마일리지가 충전됩니다.</li>
+        <li>충전 신청 후, 기재된 입금 계좌로 <strong class="mileage-guide-alert">1시간내로</strong> 입금해주세요.</li>
+        <li>충전 신청 금액과 입금 금액은 <strong class="mileage-guide-alert">동일</strong>해야 합니다.</li>
+        <li>회원명과 입금자명이 <strong class="mileage-guide-alert">동일</strong>해야 합니다.</li>
+        <li>가상계좌로 입금하시면 고객님의 아이템존 아이디로 마일리지가 바로 충전됩니다.</li>
       </ul>` : `<ul class="mileage-guide withdraw-guide">
         <li><b>안내사항</b></li>
         <li>23:40 ~ 02:00까지 은행 점검 시간으로 출금이 지연될 수 있습니다.</li>
         <li>출금 신청 후 30분 이내 처리됩니다.</li>
         <li>아이템존 회원명, 은행 예금주명이 다른 경우 출금이 불가합니다.</li>
-        <li>반드시 회원정보에 가입한 은행, 계좌번호, 예금주명을 확인해 주세요.</li>
         <li>[출금 가능 마일리지]는 거래에 사용중인 마일리지, 출금 요청중인 마일리지를 제외한 마일리지입니다.</li>
-        <li>최소 출금금액은 2,000원 이상입니다. (100원 단위로 입력해주세요.)</li>
+        <li>최소 출금금액은 2,000원 이상입니다. (1,000원 단위로 입력해주세요.)</li>
       </ul>`}
     </section>
     <aside class="mileage-request-panel">
@@ -1604,11 +1612,29 @@ function pointPage(user, db, type) {
         <p class="form-message"></p>
       </form>
     </aside>
+    ${charge && pendingChargeRequest ? `<section class="charge-account-check">
+      <h2>충전전용계좌 확인</h2>
+      <table>
+        <thead><tr><th>은행명</th><th>계좌번호</th><th>이름</th><th>입금마감</th></tr></thead>
+        <tbody><tr><td>${esc(chargeAccount.bank || "-")}</td><td>${esc(chargeAccount.number || "-")}</td><td>${esc(chargeAccount.holder || "-")}</td><td>${esc(chargeDeadline)}</td></tr></tbody>
+      </table>
+      <p class="charge-account-caution"><strong>주의!</strong> <b>카카오뱅크</b> · <b>카카오페이</b> · <b>토스뱅크</b>등의 간편결제 서비스에서는 가상계좌로의 <em>입금 확인이 되지 않습니다.</em></p>
+    </section>` : ""}
     <section class="mileage-history mypage-simple-history mileage-page-history">
       <h2>${charge ? "마일리지 충전 내역" : "마일리지 출금 내역"}</h2>
       <nav><button class="active">년별 보기</button><button>월별 보기</button></nav>
       <ul>${mileageList || "<li class='empty-row'>내역이 없습니다.</li>"}</ul>
     </section>
+    ${charge ? `<div class="withdraw-confirm-layer" data-charge-modal hidden>
+      <section class="withdraw-confirm-card charge-confirm-card" role="dialog" aria-modal="true" aria-labelledby="chargeConfirmTitle">
+        <h2 id="chargeConfirmTitle">ItemZone 알림</h2>
+        <p class="charge-confirm-copy">충전전용계좌란<br>가입하신 회원님에게 각각 부여되는 가상의 계좌번호로<br>해당 계좌로 입금하시면<br>고객님의 아이템존 아이디로 마일리지가 5분내로 충전됩니다.<br><br>진행하시겠습니까?</p>
+        <div class="withdraw-confirm-actions">
+          <button type="button" data-charge-confirm>확인</button>
+          <button type="button" class="ghost" data-charge-cancel>취소</button>
+        </div>
+      </section>
+    </div>` : ""}
     ${!charge ? `<div class="withdraw-confirm-layer" data-withdraw-modal hidden>
       <section class="withdraw-confirm-card" role="dialog" aria-modal="true" aria-labelledby="withdrawConfirmTitle">
         <h2 id="withdrawConfirmTitle">출금 계좌 확인</h2>
@@ -2019,6 +2045,13 @@ async function api(req, res, db, user, pathname) {
         withdrawAccount = { bank, number, holder };
         user.points = Number(user.points || 0) - amount;
       }
+      if (data.type === "charge") {
+        (db.pointRequests || []).filter((row) => row.userId === user.id && row.type === "charge" && String(row.status || "대기") === "대기").forEach((row) => {
+          row.status = "회원취소";
+          row.memberCanceledAt = now();
+          row.autoCanceledByNextCharge = true;
+        });
+      }
       db.pointRequests.push({ id: id("point"), userId: user.id, type: data.type, amount, nickname: user.nickname || "", name: user.name || "", withdrawAccount, status: "대기", pointsReserved: data.type === "withdraw", pointsReleased: false, createdAt: now(), handledBy: null, handledAt: null });
       await writeDb(db); return send(res, 200, { ok: true, account: db.site.chargeAccount });
     }
@@ -2267,14 +2300,16 @@ async function api(req, res, db, user, pathname) {
     }
     if (pathname === "/api/chat/member" && req.method === "GET") {
       if (!protect(user, "member")) return send(res, 401, { error: "로그인이 필요합니다." });
-      const room = ensureRoom(db, user);
+      const room = (db.chatRooms || []).find((item) => item.userId === user.id && item.status !== "종료");
+      if (!room) return send(res, 200, { messages: [supportGreetingMessage()] });
       const unreadStaffMessages = db.chatMessages.filter((m) => m.roomId === room.id && m.senderType === "staff" && !m.read);
       if (unreadStaffMessages.length || room.memberUnread) {
         unreadStaffMessages.forEach((m) => { m.read = true; m.readAt = now(); });
         room.memberUnread = 0;
         await writeDb(db);
       }
-      return send(res, 200, { messages: memberMessages(db, room.id) });
+      const messages = memberMessages(db, room.id);
+      return send(res, 200, { messages: messages.length ? messages : [supportGreetingMessage()] });
     }
     if (pathname === "/api/chat/member" && req.method === "POST") {
       if (!protect(user, "member")) return send(res, 401, { error: "로그인이 필요합니다." });
@@ -2294,7 +2329,7 @@ async function api(req, res, db, user, pathname) {
     }
     if (pathname === "/api/chat/staff" && req.method === "GET") {
       if (!protect(user, "staff")) return send(res, 403, { error: "권한이 없습니다." });
-      const rooms = db.chatRooms.map((r) => {
+      const rooms = db.chatRooms.filter((r) => db.chatMessages.some((m) => m.roomId === r.id)).map((r) => {
         const member = db.users.find((u) => u.id === r.userId);
         return { ...r, memberName: member?.nickname, username: member?.username, realName: member?.name || "", name: member?.name || "", displayGrade: member?.displayGrade, internalGrade: normalizeInternalGrade(member?.internalGrade) };
       }).sort((a, b) => String(b.lastAt).localeCompare(String(a.lastAt)));
@@ -2383,6 +2418,10 @@ function addMessage(db, room, user, senderType, message, attachment = null) {
 
 function memberMessages(db, roomId) {
   return db.chatMessages.filter((m) => m.roomId === roomId).map((m) => ({ id: m.id, senderType: m.senderType, displayName: m.displayName, message: m.message, attachment: m.attachment || null, deletedByMember: Boolean(m.deletedByMember), createdAt: m.createdAt }));
+}
+
+function supportGreetingMessage() {
+  return { id: "support_greeting", senderType: "staff", displayName: "아이템존 상담사", message: "안녕하세요.\n아이템존 고객센터 입니다.", attachment: null, deletedByMember: false, createdAt: now() };
 }
 
 function addDirectMessage(db, room, user, message, attachment = null) {

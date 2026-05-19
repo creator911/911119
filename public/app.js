@@ -68,6 +68,14 @@ if (pendingTopMessage) {
 loadTopNotifications().catch(() => {});
 setInterval(() => loadTopNotifications().catch(() => {}), 3000);
 
+const focusChargeAccount = sessionStorage.getItem("focusChargeAccount");
+if (focusChargeAccount) {
+  sessionStorage.removeItem("focusChargeAccount");
+  requestAnimationFrame(() => {
+    $(".charge-account-check")?.scrollIntoView({ behavior: "smooth", block: "center" });
+  });
+}
+
 document.addEventListener("mousedown", (event) => {
   if (event.target.closest(".trade-editor-toolbar button")) event.preventDefault();
 });
@@ -559,7 +567,36 @@ document.addEventListener("input", (event) => {
 
 let pendingWithdrawForm = null;
 let pendingWithdrawAccount = null;
+let pendingChargeForm = null;
 const withdrawModalTemplate = $(".withdraw-confirm-card")?.innerHTML || "";
+
+function closeChargeModal() {
+  const modal = $("[data-charge-modal]");
+  if (!modal) return;
+  modal.hidden = true;
+  pendingChargeForm = null;
+}
+
+function openChargeModal(form) {
+  const modal = $("[data-charge-modal]");
+  if (!modal) return false;
+  pendingChargeForm = form;
+  modal.hidden = false;
+  modal.querySelector("[data-charge-confirm]")?.focus();
+  return true;
+}
+
+async function submitChargeRequest() {
+  const form = pendingChargeForm;
+  if (!form) return;
+  const data = formData(form);
+  await post("/api/point-request", { ...data, type: "charge" });
+  closeChargeModal();
+  form.reset();
+  updateMileageForm(form);
+  sessionStorage.setItem("focusChargeAccount", "1");
+  location.href = "/charge";
+}
 
 function closeWithdrawModal() {
   const modal = $("[data-withdraw-modal]");
@@ -651,6 +688,18 @@ document.addEventListener("click", (event) => {
 });
 
 document.addEventListener("click", (event) => {
+  if (event.target.closest("[data-charge-cancel]")) {
+    closeChargeModal();
+    return;
+  }
+  if (event.target.closest("[data-charge-confirm]")) {
+    submitChargeRequest().catch((error) => {
+      const message = pendingChargeForm ? $(".form-message", pendingChargeForm) : null;
+      if (message) message.textContent = error.message;
+      closeChargeModal();
+    });
+    return;
+  }
   if (event.target.closest("[data-withdraw-cancel]")) {
     closeWithdrawModal();
     return;
@@ -673,10 +722,15 @@ document.addEventListener("click", (event) => {
   }
   const modal = event.target.closest("[data-withdraw-modal]");
   if (modal && event.target === modal) closeWithdrawModal();
+  const chargeModal = event.target.closest("[data-charge-modal]");
+  if (chargeModal && event.target === chargeModal) closeChargeModal();
 });
 
 document.addEventListener("keydown", (event) => {
-  if (event.key === "Escape") closeWithdrawModal();
+  if (event.key === "Escape") {
+    closeWithdrawModal();
+    closeChargeModal();
+  }
 });
 
 const signupAvailability = new Map();
@@ -780,6 +834,10 @@ $$("form[data-form]").forEach((form) => {
         sessionStorage.setItem("topMessage", JSON.stringify({ text: doneMessage, tone: type }));
         location.href = "/";
       } else if (type === "charge" || type === "withdraw") {
+        if (type === "charge") {
+          if (!form.reportValidity()) return;
+          if (openChargeModal(form)) return;
+        }
         if (type === "withdraw" && openWithdrawModal(form)) return;
         const result = await post("/api/point-request", { ...data, type });
         message.textContent = type === "charge" ? `신청완료: ${result.account.bank} ${result.account.number} (${result.account.holder})` : "출금 신청이 접수되었습니다.";

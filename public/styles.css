@@ -6504,6 +6504,29 @@ input:focus-visible {
   color: #475569;
 }
 
+.charge-confirm-card {
+  width: min(470px, 100%);
+}
+
+.charge-confirm-copy {
+  color: #111827;
+  font-size: 15px;
+  font-weight: 700;
+  line-height: 1.65;
+  word-break: keep-all;
+}
+
+.charge-confirm-card .withdraw-confirm-actions {
+  grid-template-columns: 1fr 1fr;
+  justify-content: end;
+  max-width: 170px;
+  margin-left: auto;
+}
+
+.charge-confirm-card .withdraw-confirm-actions button {
+  border-radius: 999px;
+}
+
 @media (max-width: 900px) {
   .mileage-page {
     grid-template-columns: 1fr;
@@ -6602,6 +6625,91 @@ input:focus-visible {
   margin-left: -8px;
 }
 
+.charge-account-check {
+  grid-column: 1 / -1;
+  margin: 0;
+  padding: 22px 24px 24px;
+  border: 1px solid #dfe6ef;
+  border-radius: 12px;
+  background: #fff;
+  box-shadow: 0 16px 34px rgba(15, 23, 42, .08);
+}
+
+.charge-account-check h2 {
+  margin: 0 0 16px;
+  color: #0f172a;
+  font-size: 24px;
+  font-weight: 900;
+  letter-spacing: 0;
+}
+
+.charge-account-check table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  overflow: hidden;
+  border: 1px solid #e4ebf5;
+  border-radius: 10px;
+}
+
+.charge-account-check th,
+.charge-account-check td {
+  height: 52px;
+  padding: 12px 14px;
+  border-right: 1px solid #edf2f8;
+  border-bottom: 1px solid #edf2f8;
+  text-align: center;
+  font-size: 15px;
+  font-weight: 800;
+}
+
+.charge-account-check th {
+  background: #fbfcfe;
+  color: #64748b;
+}
+
+.charge-account-check td {
+  color: #111827;
+}
+
+.charge-account-check th:last-child,
+.charge-account-check td:last-child {
+  border-right: 0;
+}
+
+.charge-account-check tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+.charge-account-caution {
+  margin: 14px 0 0;
+  color: #111827;
+  font-size: 15px;
+  font-weight: 800;
+  line-height: 1.5;
+  word-break: keep-all;
+}
+
+.charge-account-caution strong {
+  display: inline-block;
+  color: #ef1717;
+  font-weight: 950;
+  animation: cautionPulse 1.35s ease-in-out infinite;
+}
+
+.charge-account-caution b {
+  color: #111827;
+  font-weight: 950;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.charge-account-caution em {
+  color: #ef1717;
+  font-style: normal;
+  font-weight: 950;
+}
+
 .mileage-cancel-request {
   min-height: 30px;
   padding: 0 12px;
@@ -6629,11 +6737,18 @@ input:focus-visible {
 }
 
 .withdraw-page .mileage-guide {
-  margin-top: 50px;
+  margin-top: 84px;
 }
 
 .mileage-guide li:last-child {
   margin-bottom: 0;
+}
+
+.mileage-guide-alert {
+  display: inline-block;
+  color: #ef1717;
+  font-weight: 950;
+  animation: cautionPulse 1.35s ease-in-out infinite;
 }
 
 .mileage-request-panel {
