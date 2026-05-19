@@ -1909,7 +1909,7 @@ input:focus-visible {
   grid-template-columns: 1fr;
   gap: 10px;
   padding: 12px;
-  background: #f3f7ff;
+  background: #fff;
 }
 .member-summary {
   display: grid;
@@ -2507,7 +2507,7 @@ input:focus-visible {
 .dashboard .quick-grid {
   align-self: stretch;
   padding: 0;
-  background: #f8fbff;
+  background: #fff;
   border: 1px solid #dbe6f3;
   border-radius: 8px;
   box-shadow: none;
@@ -2637,6 +2637,7 @@ input:focus-visible {
   gap: 8px;
   justify-items: stretch;
   padding: 26px 18px 0;
+  background: #fff;
 }
 .member-tier {
   display: grid;
@@ -7673,13 +7674,32 @@ main,
   border: 0;
   border-radius: 0;
   box-shadow: none;
-  transition: background .16s ease, filter .16s ease;
+  transition: background .14s ease, box-shadow .14s ease, filter .14s ease, transform .14s ease;
 }
 
-.quick-grid > .quick-actions a:hover {
+.quick-grid > .quick-actions a::after {
+  content: "";
+  position: absolute;
+  inset: 7px 5px;
+  border: 1px solid transparent;
+  border-radius: 18px;
+  background: transparent;
+  pointer-events: none;
+  transition: background .14s ease, border-color .14s ease, box-shadow .14s ease;
+}
+
+.quick-grid > .quick-actions a:hover,
+.quick-grid > .quick-actions a:focus-visible {
+  background: rgba(241, 246, 255, .42);
+  transform: translateY(-1px);
+  outline: none;
+}
+
+.quick-grid > .quick-actions a:hover::after,
+.quick-grid > .quick-actions a:focus-visible::after {
   background: rgba(255, 255, 255, .18);
-  filter: brightness(1.03);
-  transform: none;
+  border-color: rgba(8, 103, 219, .16);
+  box-shadow: 0 8px 18px rgba(8, 103, 219, .10);
 }
 
 .quick-grid > .quick-actions a:active {
