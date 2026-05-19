@@ -2327,7 +2327,7 @@ async function api(req, res, db, user, pathname) {
         await writeDb(db);
       }
       const messages = memberMessages(db, room.id);
-      return send(res, 200, { messages: messages.length ? messages : [supportGreetingMessage()] });
+      return send(res, 200, { messages: [supportGreetingMessage(), ...messages] });
     }
     if (pathname === "/api/chat/member" && req.method === "POST") {
       if (!protect(user, "member")) return send(res, 401, { error: "로그인이 필요합니다." });
