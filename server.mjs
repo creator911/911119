@@ -189,6 +189,15 @@ function normalizeDb(db) {
   db.directChatRooms ||= [];
   db.directChatMessages ||= [];
   db.userNotifications ||= [];
+  db.pointRequests ||= [];
+  (db.pointRequests || []).forEach((request) => {
+    if (isExpiredPendingCharge(request)) {
+      request.status = "회원취소";
+      request.memberCanceledAt ||= now();
+      request.autoCanceledByChargeDeadline = true;
+      changed = true;
+    }
+  });
   (db.sellPosts || []).forEach((post) => {
     const nextStatus = normalizePostStatusForType(post.status, "sell");
     if (post.status !== nextStatus) {
@@ -1059,6 +1068,14 @@ function pointDeadlineText(value, minutes = 60) {
   const base = new Date(value || Date.now());
   const deadline = new Date(base.getTime() + minutes * 60 * 1000);
   return `${deadline.toLocaleString("sv-SE", { timeZone: "Asia/Seoul" }).slice(0, 16)}까지`;
+}
+
+function isExpiredPendingCharge(request) {
+  if (!request || request.type !== "charge") return false;
+  if (String(request.status || "대기") !== "대기") return false;
+  const createdAt = new Date(request.createdAt || 0).getTime();
+  if (!Number.isFinite(createdAt) || createdAt <= 0) return false;
+  return Date.now() - createdAt >= 60 * 60 * 1000;
 }
 
 function tradeComposePage(user, type, db, selectedSlug = "") {
