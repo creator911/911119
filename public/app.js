@@ -118,6 +118,21 @@ function toggleMemberChat() {
 }
 
 document.addEventListener("click", async (event) => {
+  const tradeDelete = event.target.closest("[data-trade-delete]");
+  if (tradeDelete) {
+    event.preventDefault();
+    if (!confirm("이 거래글을 삭제할까요?")) return;
+    tradeDelete.disabled = true;
+    try {
+      const result = await post("/api/trade/delete", { id: tradeDelete.dataset.tradeId, type: tradeDelete.dataset.tradeDelete });
+      sessionStorage.setItem("topMessage", JSON.stringify({ text: "거래글이 삭제되었습니다.", tone: tradeDelete.dataset.tradeDelete }));
+      location.href = result.redirect || "/games";
+    } catch (error) {
+      alert(error.message);
+      tradeDelete.disabled = false;
+    }
+    return;
+  }
   const tradeComplete = event.target.closest("[data-trade-complete]");
   if (tradeComplete) {
     event.preventDefault();
@@ -177,6 +192,20 @@ document.addEventListener("click", async (event) => {
   if (logout) {
     await post("/api/logout", {});
     location.href = "/";
+  }
+  const pointCancel = event.target.closest("[data-point-cancel]");
+  if (pointCancel) {
+    event.preventDefault();
+    if (!confirm("진행중인 신청을 취소할까요?")) return;
+    pointCancel.disabled = true;
+    try {
+      await post("/api/point-request/cancel", { id: pointCancel.dataset.pointCancel });
+      location.reload();
+    } catch (error) {
+      alert(error.message);
+      pointCancel.disabled = false;
+    }
+    return;
   }
   const pointBtn = event.target.closest("[data-point]");
   if (pointBtn) {
@@ -507,7 +536,7 @@ function updateMileageForm(form) {
   const amount = Number(input?.value || 0);
   const balance = Number(form.dataset.balance || 0);
   const isCharge = form.dataset.form === "charge";
-  const fee = isCharge && amount > 0 && amount < 50000 ? 1000 : 0;
+  const fee = 0;
   const total = isCharge ? amount + fee : Math.min(amount, balance);
   const amountTarget = $('[data-point-summary="amount"]', form);
   const feeTarget = $('[data-point-summary="fee"]', form);
@@ -825,6 +854,7 @@ if (chatOpen && chatWidget) {
   chatInput?.addEventListener("input", updateChatSendState);
   chatInput?.addEventListener("keydown", (event) => {
     if (event.key !== "Enter" || event.isComposing) return;
+    if (event.shiftKey) return;
     event.preventDefault();
     chatForm?.requestSubmit();
   });
@@ -975,7 +1005,7 @@ async function loadDirectMessages() {
   directChatLog.innerHTML = messages.map((m) => {
     if (m.deleted) return `<p class="${m.side} deleted" data-message-id="${escapeAttr(m.id)}"><span>삭제된 메시지입니다.</span></p>`;
     if (m.attachment) chatImageSources.set(m.id, { src: m.attachment.dataUrl, name: m.attachment.name });
-    const text = m.message ? `<span>${escapeHtml(m.message)}</span>` : "";
+    const text = m.message ? `<span>${messageHtml(m.message)}</span>` : "";
     const image = m.attachment ? `<button type="button" class="chat-image-link" data-chat-image-id="${escapeAttr(m.id)}"><img class="chat-image" src="${escapeAttr(m.attachment.dataUrl)}" alt="${escapeAttr(m.attachment.name)}"></button>` : "";
     const action = m.side === "member" ? `<button class="message-more" data-direct-chat-menu="${escapeAttr(m.id)}" aria-label="메시지 옵션">⋯</button><em class="message-actions" data-direct-chat-actions="${escapeAttr(m.id)}"><button type="button" data-direct-chat-delete="${escapeAttr(m.id)}">메시지 삭제</button></em>` : "";
     const avatar = m.side === "staff" ? `<img class="direct-chat-grade-avatar" src="${escapeAttr(room.peerGradeAsset || "")}" alt="">` : "";
@@ -1073,6 +1103,7 @@ if (directChatOpen && directChatWidget) {
   directChatSend?.message?.addEventListener("input", updateDirectSendState);
   directChatSend?.message?.addEventListener("keydown", (event) => {
     if (event.key !== "Enter" || event.isComposing) return;
+    if (event.shiftKey) return;
     event.preventDefault();
     directChatSend?.requestSubmit();
   });
@@ -1124,8 +1155,9 @@ async function loadStaffRooms() {
   $("#roomCount").textContent = rooms.reduce((sum, room) => sum + (room.staffUnread || 0), 0);
   list.innerHTML = rooms.map((room) => {
     const unread = Number(room.staffUnread || 0);
+    const realName = room.realName || room.name || "-";
     return `<button class="room-row ${activeRoom === room.id ? "active" : ""} ${unread ? "has-unread" : ""}" data-room="${room.id}">
-    <b>${room.memberName || room.username}</b><span>${room.displayGrade} · ${room.internalGrade}</span>${unread ? `<em>${unread}</em>` : ""}<small>${room.lastMessage || "새 상담"}</small>
+    <span class="room-row-head"><b>${escapeHtml(room.memberName || room.username)}</b><i>${escapeHtml([room.displayGrade || "-", room.internalGrade || "-", realName].join(" · "))}</i></span>${unread ? `<em>${unread}</em>` : ""}<small>${escapeHtml(room.lastMessage || "새 상담")}</small>
   </button>`;
   }).join("") || "<p class='empty'>상담방이 없습니다.</p>";
 }
@@ -1143,7 +1175,7 @@ async function loadStaffMessages() {
     if (m.attachment) chatImageSources.set(m.id, { src: m.attachment.dataUrl, name: m.attachment.name });
     const image = m.attachment ? `<button type="button" class="chat-image-link" data-chat-image-id="${escapeAttr(m.id)}"><img class="chat-image" src="${escapeAttr(m.attachment.dataUrl)}" alt="${escapeAttr(m.attachment.name)}"></button>` : "";
     const read = m.senderType === "staff" && m.read ? "<small class=\"read-receipt\">읽음</small>" : "";
-    return `<p class="${m.senderType}" data-message-id="${escapeAttr(m.id)}"><b>${escapeHtml(m.displayName)}${m.internalStaffName ? ` (${escapeHtml(m.internalStaffName)})` : ""}</b><button class="staff-message-delete" type="button" data-staff-message-delete="${escapeAttr(m.id)}" aria-label="메시지 삭제">삭제</button><span>${escapeHtml(m.message || "")}${deleted}</span>${image}${read}</p>`;
+    return `<p class="${m.senderType}" data-message-id="${escapeAttr(m.id)}"><b>${escapeHtml(m.displayName)}${m.internalStaffName ? ` (${escapeHtml(m.internalStaffName)})` : ""}</b><button class="staff-message-delete" type="button" data-staff-message-delete="${escapeAttr(m.id)}" aria-label="메시지 삭제">삭제</button><span>${messageHtml(m.message || "")}${deleted}</span>${image}${read}</p>`;
   }).join("");
   log.scrollTop = log.scrollHeight;
 }
@@ -1208,6 +1240,7 @@ if (document.body.dataset.page === "staff") {
   });
   staffInput?.addEventListener("keydown", (event) => {
     if (event.key !== "Enter" || event.isComposing) return;
+    if (event.shiftKey) return;
     event.preventDefault();
     staffForm?.requestSubmit();
   });

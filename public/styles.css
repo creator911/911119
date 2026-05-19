@@ -799,8 +799,10 @@ td button { margin-right: 6px; min-height: 34px; }
 
 .admin-page .point-request-panel th:nth-child(6),
 .admin-page .point-request-panel td:nth-child(6) {
-  width: 5%;
+  width: 7%;
+  min-width: 58px;
   text-align: center;
+  white-space: nowrap;
 }
 
 .admin-page .point-request-panel th:nth-child(7),
@@ -829,8 +831,7 @@ td button { margin-right: 6px; min-height: 34px; }
 .admin-page .point-request-panel td:nth-child(1),
 .admin-page .point-request-panel td:nth-child(2),
 .admin-page .point-request-panel td:nth-child(3),
-.admin-page .point-request-panel td:nth-child(4),
-.admin-page .point-request-panel td:nth-child(6) {
+.admin-page .point-request-panel td:nth-child(4) {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -926,7 +927,8 @@ td button { margin-right: 6px; min-height: 34px; }
 }
 
 .staff-page {
-  height: calc(100vh - 126px);
+  height: calc(100vh - 206px);
+  min-height: 520px;
   display: grid;
   grid-template-columns: 360px 1fr;
   background: white;
@@ -934,23 +936,21 @@ td button { margin-right: 6px; min-height: 34px; }
 .chat-list {
   border-right: 1px solid var(--line);
   overflow-y: auto;
-  padding: 18px;
+  padding: 12px;
 }
 .room-row {
   position: relative;
   width: 100%;
   display: grid;
-  grid-template-columns: 1fr auto;
-  gap: 4px;
+  gap: 5px;
   text-align: left;
   background: white;
   border-bottom: 1px solid var(--line);
   color: #111827;
-  padding: 14px 8px;
+  padding: 10px 8px;
 }
 .room-row.active { background: #eef5ff; }
 .room-row.has-unread {
-  min-height: 72px;
   background: #ef4444;
   border-color: #ef4444;
   color: #fff;
@@ -962,7 +962,33 @@ td button { margin-right: 6px; min-height: 34px; }
 .room-row.has-unread small {
   color: rgba(255,255,255,.86);
 }
-.room-row span, .room-row small { grid-column: 1 / -1; color: var(--muted); }
+.room-row-head {
+  min-width: 0;
+  display: flex;
+  align-items: baseline;
+  gap: 7px;
+}
+.room-row-head b {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.room-row-head i {
+  flex: 0 0 auto;
+  color: var(--muted);
+  font-size: 13px;
+  font-style: normal;
+  font-weight: 700;
+}
+.room-row small {
+  min-width: 0;
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 .room-row.has-unread span,
 .room-row.has-unread small {
   color: rgba(255,255,255,.86);
@@ -995,7 +1021,7 @@ td button { margin-right: 6px; min-height: 34px; }
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  padding: 16px 20px;
+  padding: 10px 16px;
   border-bottom: 1px solid var(--line);
   font-weight: 800;
 }
@@ -1014,7 +1040,7 @@ td button { margin-right: 6px; min-height: 34px; }
 }
 .chat-log {
   overflow-y: auto;
-  padding: 18px;
+  padding: 12px 18px;
   background: #f8fafc;
 }
 .chat-log p {
@@ -1027,11 +1053,15 @@ td button { margin-right: 6px; min-height: 34px; }
 .chat-log p.staff { margin-left: auto; align-items: flex-end; }
 .chat-log b { font-size: 12px; color: var(--muted); margin-bottom: 4px; }
 .chat-log span {
+  width: fit-content;
+  max-width: 100%;
+  display: block;
   background: white;
   border: 1px solid var(--line);
   border-radius: 12px;
   padding: 10px 12px;
   line-height: 1.45;
+  white-space: normal;
 }
 .chat-log .staff span { background: #ffe54d; border-color: #ffe54d; }
 .chat-log .chat-image {
@@ -1082,7 +1112,7 @@ td button { margin-right: 6px; min-height: 34px; }
   display: grid;
   grid-template-columns: 1fr 80px;
   gap: 8px;
-  padding: 12px;
+  padding: 8px 12px;
   background: white;
   border-top: 1px solid var(--line);
 }
@@ -3919,6 +3949,13 @@ input:focus-visible {
   color: #fff;
 }
 
+.trade-detail-delete {
+  grid-column: 1 / -1;
+  border: 0;
+  background: #ef4444;
+  color: #fff;
+}
+
 .trade-detail-buttons button:disabled {
   opacity: .6;
   cursor: progress;
@@ -4470,19 +4507,22 @@ input:focus-visible {
   background: #f4f5f7;
 }
 
-.chat-composer input[name="message"] {
+.chat-composer textarea[name="message"] {
   grid-column: 1 / -1;
   width: 100%;
   min-height: 32px;
+  max-height: 92px;
   padding: 0;
   border: 0;
   background: transparent;
   color: #111827;
   font-size: 16px;
   outline: none;
+  resize: none;
+  overflow-y: auto;
 }
 
-.chat-composer input[name="message"]::placeholder {
+.chat-composer textarea[name="message"]::placeholder {
   color: #9aa0aa;
 }
 
@@ -4938,6 +4978,7 @@ input:focus-visible {
   color: #252525;
   font-size: 15px;
   line-height: 1.42;
+  white-space: normal;
   word-break: keep-all;
   overflow-wrap: anywhere;
 }
@@ -5158,12 +5199,20 @@ input:focus-visible {
   padding: 20px 22px;
 }
 
-.mypage-simple-panel h2,
-.mypage-simple-history h2 {
+.mypage-simple-panel h2 {
   margin: 0 0 18px;
   color: #030712;
   font-size: 28px;
   font-weight: 900;
+  letter-spacing: 0;
+}
+
+.mypage-simple-history h2 {
+  margin: 0 0 16px;
+  color: #0f172a;
+  font-size: 24px;
+  font-weight: 800;
+  line-height: 1.3;
   letter-spacing: 0;
 }
 
@@ -5321,6 +5370,14 @@ input:focus-visible {
     grid-template-columns: 1fr;
     gap: 4px;
     padding: 8px 0;
+  }
+
+  .mileage-page-history {
+    grid-column: 1 / -1;
+  }
+
+  .mileage-page-history li > span {
+    padding-left: 0;
   }
 
   .mypage-simple-history li b {
@@ -6521,6 +6578,40 @@ input:focus-visible {
   height: auto;
 }
 
+.mileage-page-history {
+  grid-column: 1 / -1;
+  min-height: 0;
+  margin: 0;
+}
+
+.mileage-page-history li {
+  grid-template-columns: 210px 150px minmax(0, 1fr) 90px auto;
+  gap: 18px;
+}
+
+.mileage-page-history li > span {
+  padding-left: 140px;
+}
+
+.mileage-page-history li em {
+  justify-self: end;
+}
+
+.mileage-page-history .mileage-cancel-request {
+  justify-self: start;
+  margin-left: -8px;
+}
+
+.mileage-cancel-request {
+  min-height: 30px;
+  padding: 0 12px;
+  border-radius: 8px;
+  background: #ef4444;
+  color: #fff;
+  font-size: 12px;
+  font-weight: 900;
+}
+
 .mileage-info-panel {
   padding-bottom: 26px;
 }
@@ -6533,12 +6624,39 @@ input:focus-visible {
   margin-bottom: 0;
 }
 
+.charge-page .mileage-guide {
+  margin-top: 70px;
+}
+
+.withdraw-page .mileage-guide {
+  margin-top: 50px;
+}
+
 .mileage-guide li:last-child {
   margin-bottom: 0;
 }
 
 .mileage-request-panel {
   align-self: stretch;
+}
+
+@media (min-width: 821px) {
+  .charge-page .mileage-info-panel {
+    min-height: 575px;
+  }
+
+  .withdraw-page .mileage-info-panel {
+    min-height: 688px;
+  }
+
+  .charge-page .mileage-feature-grid {
+    margin-top: 64px;
+    margin-bottom: 34px;
+  }
+
+  .withdraw-page .mileage-feature-grid {
+    margin-top: 52px;
+  }
 }
 
 .top-inner {
@@ -6683,6 +6801,28 @@ input:focus-visible {
   margin-top: 28px;
 }
 
+@media (min-width: 821px) {
+  .charge-page .mileage-feature-grid,
+  .withdraw-page .mileage-feature-grid {
+    margin-top: 20px;
+  }
+
+  .charge-page .mileage-feature-grid article:nth-child(1),
+  .withdraw-page .mileage-feature-grid article:nth-child(1) {
+    margin-top: 0;
+  }
+
+  .charge-page .mileage-feature-grid article:nth-child(2),
+  .withdraw-page .mileage-feature-grid article:nth-child(2) {
+    margin-top: 30px;
+  }
+
+  .charge-page .mileage-feature-grid article:nth-child(3),
+  .withdraw-page .mileage-feature-grid article:nth-child(3) {
+    margin-top: 60px;
+  }
+}
+
 .mileage-guide li {
   margin-bottom: 10px;
   line-height: 1.42;
@@ -6709,12 +6849,15 @@ input:focus-visible {
   align-items: center;
 }
 
-#staffSend.staff-send-form input[name="message"] {
-  min-height: 42px;
+#staffSend.staff-send-form textarea[name="message"] {
+  min-height: 38px;
+  max-height: 86px;
+  resize: none;
+  overflow-y: auto;
 }
 
 #staffChatAttach {
-  min-height: 42px;
+  min-height: 38px;
   padding: 0 12px;
   border: 1px solid #dce4ef;
   border-radius: 8px;
