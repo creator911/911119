@@ -188,6 +188,7 @@ function normalizeDb(db) {
   db.site.notices ||= [];
   db.directChatRooms ||= [];
   db.directChatMessages ||= [];
+  db.userNotifications ||= [];
   (db.users || []).forEach((user) => {
     if (user.role === "ADMIN") {
       user.role = "STAFF";
@@ -409,6 +410,7 @@ async function seedDb() {
     chatMessages: [],
     directChatRooms: [],
     directChatMessages: [],
+    userNotifications: [],
     auditLogs: []
   };
   await writeDb(db);
@@ -568,6 +570,68 @@ function tradeCollection(db, type) {
   return type === "sell" ? db.sellPosts || [] : db.buyPosts || [];
 }
 
+function tradeMileageTransfer(db, post, type) {
+  if (post.pointTransferred) return { ok: true };
+  const amount = Math.max(0, Math.floor(Number(post.price || 0)));
+  if (!amount) return { ok: false, error: "거래 금액을 확인하세요." };
+  const owner = db.users.find((item) => item.id === post.userId);
+  const counterparty = db.users.find((item) => item.id === post.counterpartyId);
+  if (!owner || !counterparty) return { ok: false, error: "거래 회원 정보를 찾을 수 없습니다." };
+  const payer = type === "sell" ? counterparty : owner;
+  const receiver = type === "sell" ? owner : counterparty;
+  if (payer.id === receiver.id) return { ok: false, error: "거래 당사자 정보를 확인하세요." };
+  if (Number(payer.points || 0) < amount) return { ok: false, error: "구매자의 마일리지가 부족합니다." };
+  payer.points = Number(payer.points || 0) - amount;
+  receiver.points = Number(receiver.points || 0) + amount;
+  post.pointTransferred = true;
+  post.pointTransferredAt = now();
+  post.payerId = payer.id;
+  post.receiverId = receiver.id;
+  db.pointLedger.push(
+    { id: id("ledger"), tradeId: post.id, tradeType: type, userId: payer.id, amount: -amount, reason: "trade_payment", counterpartyId: receiver.id, createdAt: now() },
+    { id: id("ledger"), tradeId: post.id, tradeType: type, userId: receiver.id, amount, reason: "trade_receive", counterpartyId: payer.id, createdAt: now() }
+  );
+  return { ok: true };
+}
+
+function notifyTradeCompleted(db, post, type) {
+  const actionLabel = type === "sell" ? "구매" : "판매";
+  const title = post.title || "거래 상품";
+  const toast = `${title} 상품이 ${actionLabel} 완료되었습니다. 마일리지를 확인해 주세요.`;
+  const chatMessage = `${title}\n거래가 완료되었습니다.\n마일리지를 확인해 주세요.`;
+  const tone = type === "sell" ? "sell" : "buy";
+  [...new Set([post.userId, post.counterpartyId].filter(Boolean))].forEach((userId) => {
+    addSystemDirectNotice(db, userId, post, type, chatMessage);
+    addUserNotification(db, userId, toast, tone);
+  });
+  return { message: toast, tone };
+}
+
+function notifyTradeRequested(db, post, type, requester) {
+  const actionLabel = type === "sell" ? "구매" : "판매";
+  const title = post.title || "거래 상품";
+  const nickname = requester?.nickname || "회원";
+  const message = `${nickname}님께서 ${title} ${actionLabel} 요청하셨습니다.`;
+  const tone = type === "sell" ? "sell" : "buy";
+  addSystemDirectNotice(db, post.userId, post, type, message);
+  addUserNotification(db, post.userId, message, tone);
+  return { message, tone };
+}
+
+function addUserNotification(db, userId, message, tone = "buy") {
+  if (!userId || !message) return null;
+  db.userNotifications ||= [];
+  const notification = {
+    id: id("notice"),
+    userId,
+    message,
+    tone: tone === "sell" ? "sell" : "buy",
+    createdAt: now()
+  };
+  db.userNotifications.push(notification);
+  return notification;
+}
+
 function tradeTypeLabel(type = "sell") {
   return type === "sell" ? "판매" : "구매";
 }
@@ -613,6 +677,23 @@ function directChatPost(db, room) {
 }
 
 function directChatMeta(db, room, user) {
+  if (room.systemOnly) {
+    return {
+      id: room.id,
+      tradeType: room.tradeType,
+      postId: room.postId,
+      tradeTitle: room.tradeTitle || "거래 알림",
+      peerId: "system",
+      peerNickname: room.systemName || "관리자",
+      peerGrade: "마스터",
+      peerGradeAsset: gradeAsset("마스터"),
+      lastMessage: room.lastMessage || "",
+      lastAt: room.lastAt || room.createdAt,
+      unread: Number(room.unreadBy?.[user.id] || 0),
+      systemOnly: true,
+      readOnlyMessage: "답장이 불가한 채팅입니다."
+    };
+  }
   const peerId = (room.participantIds || []).find((idValue) => idValue !== user.id);
   const peer = db.users?.find((item) => item.id === peerId);
   const post = directChatPost(db, room);
@@ -634,6 +715,50 @@ function directChatMeta(db, room, user) {
 function findDirectRoom(db, roomId, user) {
   const room = (db.directChatRooms || []).find((item) => item.id === roomId && (item.participantIds || []).includes(user.id));
   return room || null;
+}
+
+function addSystemDirectNotice(db, userId, post, type, message) {
+  if (!userId) return null;
+  db.directChatRooms ||= [];
+  db.directChatMessages ||= [];
+  const roomKey = `trade-complete:${type}:${post.id}:${userId}`;
+  let room = db.directChatRooms.find((item) => item.systemOnly && item.roomKey === roomKey);
+  if (!room) {
+    room = {
+      id: id("direct"),
+      roomKey,
+      systemOnly: true,
+      systemName: "관리자",
+      tradeType: type,
+      postId: post.id,
+      tradeTitle: post.title || "거래 상품",
+      ownerId: "system",
+      starterId: "system",
+      participantIds: [userId],
+      unreadBy: { [userId]: 0 },
+      lastMessage: "",
+      lastAt: now(),
+      createdAt: now()
+    };
+    db.directChatRooms.push(room);
+  }
+  db.directChatMessages.push({
+    id: id("dmsg"),
+    roomId: room.id,
+    senderId: "system",
+    displayName: "관리자",
+    message,
+    attachment: null,
+    deleted: false,
+    system: true,
+    createdAt: now(),
+    readBy: ["system"]
+  });
+  room.lastMessage = message;
+  room.lastAt = now();
+  room.unreadBy ||= {};
+  room.unreadBy[userId] = Number(room.unreadBy[userId] || 0) + 1;
+  return room;
 }
 
 function ensureDirectRoom(db, user, type, postId) {
@@ -1413,7 +1538,7 @@ function pointPage(user, db, type) {
           </select>
         </label>
         <label>계좌번호
-          <input name="withdrawAccountNumber" inputmode="numeric" autocomplete="off" placeholder="계좌번호를 입력하세요" required>
+          <input name="withdrawAccountNumber" inputmode="numeric" pattern="[0-9]*" autocomplete="off" placeholder="계좌번호를 입력하세요" required>
         </label>
         <label>예금주명
           <input name="withdrawHolder" autocomplete="name" placeholder="예금주명을 입력하세요" value="${esc(user?.name || user?.nickname || "")}" required>
@@ -1424,7 +1549,7 @@ function pointPage(user, db, type) {
         </div>
         <div class="withdraw-confirm-actions">
           <button type="button" class="ghost" data-withdraw-cancel>취소</button>
-          <button type="button" data-withdraw-confirm>출금신청 확정</button>
+          <button type="button" data-withdraw-confirm>출금신청</button>
         </div>
       </section>
     </div>` : ""}
@@ -1444,6 +1569,13 @@ function myPage(user, db) {
     if (["rejected", "거절", "취소", "취소완료"].includes(status)) return "취소";
     return "진행중";
   };
+  const ledgerLabel = (row) => {
+    if (row.reason === "trade_payment") return "거래 결제";
+    if (row.reason === "trade_receive") return "거래 대금";
+    if (row.reason === "charge") return "마일리지 충전";
+    if (row.reason === "withdraw") return "마일리지 출금";
+    return row.amount >= 0 ? "마일리지 충전" : "마일리지 차감";
+  };
   const tradeStatus = (post) => {
     if (post.status?.includes("숨김") || post.status?.includes("취소")) return "취소";
     return tradeStatusLabel(post.status, post.type);
@@ -1462,7 +1594,7 @@ function myPage(user, db) {
   };
   const mileageRows = [
     ...requests.map((r) => ({ label: r.type === "charge" ? "충전요청" : "출금요청", amount: r.amount, status: requestStatus(r.status), createdAt: r.createdAt })),
-    ...ledger.map((r) => ({ label: r.amount >= 0 ? "마일리지 충전" : "마일리지 차감", amount: Math.abs(r.amount), status: "완료", createdAt: r.createdAt }))
+    ...ledger.map((r) => ({ label: ledgerLabel(r), amount: Math.abs(r.amount), status: "완료", createdAt: r.createdAt }))
   ].sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt))).slice(0, 12);
   const mileageList = mileageRows.map((row) => `<li>
     <time>${formatDateTime(row.createdAt)}</time>
@@ -1752,6 +1884,7 @@ async function api(req, res, db, user, pathname) {
       post.status = nextStatus;
       post.counterpartyId = user.id;
       post.updatedAt = now();
+      notifyTradeRequested(db, post, type, user);
       await writeDb(db);
       return send(res, 200, { ok: true, status: nextStatus });
     }
@@ -1766,12 +1899,15 @@ async function api(req, res, db, user, pathname) {
       const statusKey = String(post.status || "").replace(/\s/g, "");
       const expectedStatus = type === "sell" ? "구매진행중" : "판매진행중";
       if (statusKey !== expectedStatus) return send(res, 400, { error: "진행 중인 거래만 완료할 수 있습니다." });
+      const transfer = tradeMileageTransfer(db, post, type);
+      if (!transfer.ok) return send(res, 400, { error: transfer.error });
       post.status = type === "sell" ? "구매완료" : "판매완료";
       post.completedBy = user.id;
       post.completedAt = now();
       post.updatedAt = now();
+      const notification = notifyTradeCompleted(db, post, type);
       await writeDb(db);
-      return send(res, 200, { ok: true, status: post.status });
+      return send(res, 200, { ok: true, status: post.status, message: notification.message, tone: notification.tone });
     }
     if (pathname === "/api/trade/status" && req.method === "POST") {
       if (!protect(user, "member")) return send(res, 401, { error: "로그인이 필요합니다." });
@@ -1801,10 +1937,12 @@ async function api(req, res, db, user, pathname) {
         const number = String(data.withdrawAccountNumber || "").trim();
         const holder = String(data.withdrawHolder || "").trim();
         if (!WITHDRAW_BANKS.includes(bank)) return send(res, 400, { error: "출금 은행을 선택하세요." });
+        if (!/^\d+$/.test(number)) return send(res, 400, { error: "계좌번호는 숫자만 입력하세요." });
         if (!number || !holder) return send(res, 400, { error: "출금 계좌번호와 예금주명을 입력하세요." });
         withdrawAccount = { bank, number, holder };
+        user.points = Number(user.points || 0) - amount;
       }
-      db.pointRequests.push({ id: id("point"), userId: user.id, type: data.type, amount, nickname: user.nickname || "", name: user.name || "", withdrawAccount, status: "대기", createdAt: now(), handledBy: null, handledAt: null });
+      db.pointRequests.push({ id: id("point"), userId: user.id, type: data.type, amount, nickname: user.nickname || "", name: user.name || "", withdrawAccount, status: "대기", pointsReserved: data.type === "withdraw", pointsReleased: false, createdAt: now(), handledBy: null, handledAt: null });
       await writeDb(db); return send(res, 200, { ok: true, account: db.site.chargeAccount });
     }
     if (pathname === "/api/admin/site" && req.method === "POST") {
@@ -1901,31 +2039,46 @@ async function api(req, res, db, user, pathname) {
       const amount = Number(request.amount || 0);
       const signedAmount = request.type === "charge" ? amount : -amount;
       const linkedPointLedger = (row) => row.requestId === request.id || (!row.requestId && row.userId === request.userId && row.reason === request.type && Number(row.amount || 0) === signedAmount && (!request.handledAt || Math.abs(new Date(row.createdAt).getTime() - new Date(request.handledAt).getTime()) < 30000));
+      const isWithdraw = request.type === "withdraw";
+      const isApprovedStatus = ["approved", "승인", "완료", "처리완료"].includes(status);
+      const releaseWithdrawReservation = () => {
+        if (!member || !isWithdraw || !request.pointsReserved || request.pointsReleased) return false;
+        member.points = Math.max(0, Number(member.points || 0) + amount);
+        request.pointsReleased = true;
+        db.pointLedger.push({ id: id("ledger"), requestId: request.id, userId: member.id, amount, reason: "withdraw_release", staffId: user.id, hiddenFromMember: true, createdAt: now() });
+        return true;
+      };
       if (data.decision === "approved") {
         if (status !== "대기") return send(res, 400, { error: "대기 상태만 완료처리할 수 있습니다." });
         request.status = "승인";
         request.handledBy = user.id; request.handledAt = now();
-        if (member) {
-          member.points = Number(member.points || 0) + signedAmount;
+        if (member && request.type === "charge") {
+          member.points = Number(member.points || 0) + amount;
           db.pointLedger.push({ id: id("ledger"), requestId: request.id, userId: member.id, amount: signedAmount, reason: request.type, staffId: user.id, createdAt: now() });
+        } else if (isWithdraw) {
+          request.pointsCommitted = true;
         }
       } else if (data.decision === "rejected") {
         if (status !== "대기") return send(res, 400, { error: "대기 상태만 취소할 수 있습니다." });
         request.status = "거절";
         request.handledBy = user.id; request.handledAt = now();
+        releaseWithdrawReservation();
       } else if (data.decision === "rollback") {
-        if (!["approved", "승인", "완료", "처리완료"].includes(status)) return send(res, 400, { error: "완료된 요청만 롤백할 수 있습니다." });
+        if (!isApprovedStatus) return send(res, 400, { error: "완료된 요청만 롤백할 수 있습니다." });
         request.status = "롤백";
         request.hiddenFromMember = true;
         request.rolledBackBy = user.id; request.rolledBackAt = now();
-        if (member) {
+        if (member && request.type === "charge") {
           member.points = Math.max(0, Number(member.points || 0) - signedAmount);
           db.pointLedger.forEach((row) => {
             if (linkedPointLedger(row)) row.hiddenFromMember = true;
           });
           db.pointLedger.push({ id: id("ledger"), requestId: request.id, userId: member.id, amount: -signedAmount, reason: "rollback", staffId: user.id, hiddenFromMember: true, createdAt: now() });
+        } else if (isWithdraw) {
+          releaseWithdrawReservation();
         }
       } else if (data.decision === "deleted") {
+        if (status === "대기") releaseWithdrawReservation();
         request.status = "삭제";
         request.hiddenFromMember = true;
         request.deletedBy = user.id; request.deletedAt = now();
@@ -1936,6 +2089,17 @@ async function api(req, res, db, user, pathname) {
         return send(res, 400, { error: "처리 값을 확인하세요." });
       }
       audit(db, user, "POINT_HANDLE", request.id); await writeDb(db); return send(res, 200, { ok: true });
+    }
+    if (pathname === "/api/notifications" && req.method === "GET") {
+      if (!protect(user, "member")) return send(res, 401, { error: "로그인이 필요합니다." });
+      db.userNotifications ||= [];
+      const notifications = db.userNotifications.filter((item) => item.userId === user.id);
+      if (notifications.length) {
+        const ids = new Set(notifications.map((item) => item.id));
+        db.userNotifications = db.userNotifications.filter((item) => !ids.has(item.id));
+        await writeDb(db);
+      }
+      return send(res, 200, { notifications });
     }
     if (pathname === "/api/direct-chat/start" && req.method === "POST") {
       if (!protect(user, "member")) return send(res, 401, { error: "로그인이 필요합니다." });
@@ -1996,6 +2160,7 @@ async function api(req, res, db, user, pathname) {
       const roomId = pathname.split("/").pop();
       const room = findDirectRoom(db, roomId, user);
       if (!room) return send(res, 404, { error: "채팅방을 찾을 수 없습니다." });
+      if (room.systemOnly) return send(res, 403, { error: "답장이 불가한 채팅입니다." });
       const data = await body(req);
       addDirectMessage(db, room, user, data.message, data.attachment);
       await writeDb(db);
@@ -2145,11 +2310,12 @@ function directMessages(db, room, user) {
     return {
       id: m.id,
       senderId: m.senderId,
-      side: m.senderId === user.id ? "member" : "staff",
-      displayName: m.displayName || "회원",
+      side: m.system || m.senderId === "system" ? "staff" : m.senderId === user.id ? "member" : "staff",
+      displayName: m.displayName || (m.system ? "관리자" : "회원"),
       message: deleted ? "" : m.message,
       attachment: deleted ? null : m.attachment || null,
       deleted,
+      system: Boolean(m.system),
       createdAt: m.createdAt
     };
   });

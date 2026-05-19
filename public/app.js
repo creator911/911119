@@ -20,7 +20,12 @@ function escapeAttr(value) {
   return escapeHtml(value).replace(/`/g, "&#96;");
 }
 
-function showTopMessage(text) {
+function messageHtml(value) {
+  return escapeHtml(value).replace(/\n/g, "<br>");
+}
+
+function showTopMessage(text, tone = "buy") {
+  if (!text) return;
   let toast = $("#topMessage");
   if (!toast) {
     toast = document.createElement("div");
@@ -29,16 +34,39 @@ function showTopMessage(text) {
     document.body.appendChild(toast);
   }
   toast.textContent = text;
+  toast.classList.remove("is-sell", "is-buy");
+  toast.classList.add(tone === "sell" ? "is-sell" : "is-buy");
   toast.classList.add("is-open");
   clearTimeout(showTopMessage.timer);
   showTopMessage.timer = setTimeout(() => toast.classList.remove("is-open"), 2600);
 }
 
+function showStoredTopMessage(raw) {
+  try {
+    const parsed = JSON.parse(raw);
+    showTopMessage(parsed.text || parsed.message || "", parsed.tone);
+  } catch {
+    showTopMessage(raw);
+  }
+}
+
+async function loadTopNotifications() {
+  if (!document.body.dataset.user) return;
+  const res = await fetch("/api/notifications");
+  if (!res.ok) return;
+  const { notifications = [] } = await res.json();
+  notifications.forEach((item, index) => {
+    setTimeout(() => showTopMessage(item.message, item.tone), index * 2900);
+  });
+}
+
 const pendingTopMessage = sessionStorage.getItem("topMessage");
 if (pendingTopMessage) {
   sessionStorage.removeItem("topMessage");
-  requestAnimationFrame(() => showTopMessage(pendingTopMessage));
+  requestAnimationFrame(() => showStoredTopMessage(pendingTopMessage));
 }
+loadTopNotifications().catch(() => {});
+setInterval(() => loadTopNotifications().catch(() => {}), 3000);
 
 document.addEventListener("mousedown", (event) => {
   if (event.target.closest(".trade-editor-toolbar button")) event.preventDefault();
@@ -494,19 +522,37 @@ $$(".mileage-form").forEach((form) => {
   form.elements.amount?.addEventListener("input", () => updateMileageForm(form));
 });
 
+document.addEventListener("input", (event) => {
+  if (event.target?.name === "withdrawAccountNumber") {
+    event.target.value = event.target.value.replace(/\D/g, "");
+  }
+});
+
 let pendingWithdrawForm = null;
+let pendingWithdrawAccount = null;
+const withdrawModalTemplate = $(".withdraw-confirm-card")?.innerHTML || "";
 
 function closeWithdrawModal() {
   const modal = $("[data-withdraw-modal]");
   if (!modal) return;
   modal.hidden = true;
   pendingWithdrawForm = null;
+  pendingWithdrawAccount = null;
+}
+
+function resetWithdrawModal() {
+  const card = $(".withdraw-confirm-card");
+  if (card && withdrawModalTemplate && !card.querySelector("[name='withdrawAccountNumber']")) {
+    card.innerHTML = withdrawModalTemplate;
+  }
 }
 
 function openWithdrawModal(form) {
   const modal = $("[data-withdraw-modal]");
   if (!modal) return false;
+  resetWithdrawModal();
   pendingWithdrawForm = form;
+  pendingWithdrawAccount = null;
   const amount = Number(form.elements.amount?.value || 0);
   const amountTarget = $("[data-withdraw-confirm-amount]", modal);
   if (amountTarget) amountTarget.textContent = formatWon(amount);
@@ -515,30 +561,52 @@ function openWithdrawModal(form) {
   return true;
 }
 
-async function confirmWithdrawRequest() {
+function reviewWithdrawRequest() {
   const modal = $("[data-withdraw-modal]");
   const form = pendingWithdrawForm;
   if (!modal || !form) return;
   const message = $(".form-message", form);
   const bank = modal.querySelector("[name='withdrawBank']")?.value.trim();
-  const accountNumber = modal.querySelector("[name='withdrawAccountNumber']")?.value.trim();
+  const accountNumber = modal.querySelector("[name='withdrawAccountNumber']")?.value.replace(/\D/g, "").trim();
   const holder = modal.querySelector("[name='withdrawHolder']")?.value.trim();
   if (!bank || !accountNumber || !holder) {
     if (message) message.textContent = "은행, 계좌번호, 예금주명을 입력해주세요.";
     return;
   }
+  pendingWithdrawAccount = { bank, accountNumber, holder };
+  const card = $(".withdraw-confirm-card", modal);
+  if (!card) return;
+  card.innerHTML = `<h2>출금 정보 확인</h2>
+    <p>입력하신 정보는 아래와 같습니다.</p>
+    <div class="withdraw-review-box">
+      <p><span>예금주</span><b>${escapeHtml(holder)}</b></p>
+      <p><span>은행명</span><b>${escapeHtml(bank)}</b></p>
+      <p><span>계좌번호</span><b>${escapeHtml(accountNumber)}</b></p>
+    </div>
+    <p class="withdraw-caution"><strong>주의!</strong> 예금주와 계좌번호가 불일치할 경우 출금이 정상적으로 진행되지 않을 수 있습니다.<span>다시 한번 확인 후 출금 진행해 주세요.</span></p>
+    <div class="withdraw-confirm-actions">
+      <button type="button" class="ghost" data-withdraw-cancel>신청 취소</button>
+      <button type="button" data-withdraw-submit>확인</button>
+    </div>`;
+}
+
+async function submitWithdrawRequest() {
+  const form = pendingWithdrawForm;
+  const account = pendingWithdrawAccount;
+  if (!form || !account) return;
   const data = formData(form);
   const result = await post("/api/point-request", {
     ...data,
     type: "withdraw",
-    withdrawBank: bank,
-    withdrawAccountNumber: accountNumber,
-    withdrawHolder: holder
+    withdrawBank: account.bank,
+    withdrawAccountNumber: account.accountNumber,
+    withdrawHolder: account.holder
   });
   closeWithdrawModal();
   form.reset();
   updateMileageForm(form);
-  if (message) message.textContent = result.message || "출금 신청이 접수되었습니다.";
+  sessionStorage.setItem("topMessage", result.message || "출금 신청이 완료되었습니다.");
+  location.href = "/withdraw";
 }
 
 document.addEventListener("click", (event) => {
@@ -559,7 +627,16 @@ document.addEventListener("click", (event) => {
     return;
   }
   if (event.target.closest("[data-withdraw-confirm]")) {
-    confirmWithdrawRequest().catch((error) => {
+    try {
+      reviewWithdrawRequest();
+    } catch (error) {
+      const message = pendingWithdrawForm ? $(".form-message", pendingWithdrawForm) : null;
+      if (message) message.textContent = error.message;
+    }
+    return;
+  }
+  if (event.target.closest("[data-withdraw-submit]")) {
+    submitWithdrawRequest().catch((error) => {
       const message = pendingWithdrawForm ? $(".form-message", pendingWithdrawForm) : null;
       if (message) message.textContent = error.message;
     });
@@ -671,7 +748,7 @@ $$("form[data-form]").forEach((form) => {
       } else if (type === "sell" || type === "buy") {
         await post("/api/trade", { ...data, type });
         const doneMessage = type === "sell" ? "판매글이 등록되었습니다." : "구매글이 등록되었습니다.";
-        sessionStorage.setItem("topMessage", doneMessage);
+        sessionStorage.setItem("topMessage", JSON.stringify({ text: doneMessage, tone: type }));
         location.href = "/";
       } else if (type === "charge" || type === "withdraw") {
         if (type === "withdraw" && openWithdrawModal(form)) return;
@@ -779,7 +856,7 @@ async function loadMemberChat() {
     if (m.deletedByMember && side === "member") {
       return `<p class="member deleted"><span>삭제된 메세지입니다</span></p>`;
     }
-    const text = m.message ? `<span>${escapeHtml(m.message)}</span>` : "";
+    const text = m.message ? `<span>${messageHtml(m.message)}</span>` : "";
     if (m.attachment) chatImageSources.set(m.id, { src: m.attachment.dataUrl, name: m.attachment.name });
     const image = m.attachment ? `<button type="button" class="chat-image-link" data-chat-image-id="${escapeAttr(m.id)}"><img class="chat-image" src="${escapeAttr(m.attachment.dataUrl)}" alt="${escapeAttr(m.attachment.name)}"></button>` : "";
     const action = side === "member" ? `<button class="message-more" data-chat-menu="${escapeAttr(m.id)}" aria-label="메시지 액션">⋮</button><em class="message-actions" data-chat-actions="${escapeAttr(m.id)}"><button type="button" data-chat-delete="${escapeAttr(m.id)}">메시지 삭제</button></em>` : "";
@@ -846,7 +923,8 @@ function directChatHeader(room = null) {
     directChatTitle.innerHTML = `<b>채팅</b>`;
     return;
   }
-  directChatTitle.innerHTML = `<span class="direct-chat-peer"><img src="${escapeAttr(room.peerGradeAsset || "")}" alt=""><span><b>${escapeHtml(room.peerNickname || "회원")}</b><small>${escapeHtml(room.tradeTitle || "거래글")}</small></span></span>`;
+  const image = room.systemOnly ? (room.peerGradeAsset || "/assets/tiers/master.png") : room.peerGradeAsset || "";
+  directChatTitle.innerHTML = `<span class="direct-chat-peer"><img src="${escapeAttr(image)}" alt=""><span><b>${escapeHtml(room.peerNickname || "회원")}</b><small>${escapeHtml(room.tradeTitle || "거래글")}</small></span></span>`;
 }
 
 function directChatEmpty(text) {
@@ -877,8 +955,8 @@ async function loadDirectRooms() {
   if (!res.ok) return;
   const { rooms } = await res.json();
   setDirectUnread((rooms || []).reduce((sum, room) => sum + Number(room.unread || 0), 0));
-  directChatRooms.innerHTML = rooms.map((room) => `<button type="button" class="direct-room-row ${activeDirectRoom === room.id ? "active" : ""}" data-direct-room="${escapeAttr(room.id)}">
-    <img src="${escapeAttr(room.peerGradeAsset || "")}" alt="">
+  directChatRooms.innerHTML = rooms.map((room) => `<button type="button" class="direct-room-row ${activeDirectRoom === room.id ? "active" : ""} ${room.systemOnly && Number(room.unread || 0) > 0 ? "system-unread" : ""}" data-direct-room="${escapeAttr(room.id)}">
+    <img src="${escapeAttr(room.systemOnly ? (room.peerGradeAsset || "/assets/tiers/master.png") : room.peerGradeAsset || "")}" alt="">
     <span>
       <b>${escapeHtml(room.peerNickname || "회원")}</b>
       <small>${escapeHtml(room.tradeTitle || "거래글")}</small>
@@ -903,6 +981,7 @@ async function loadDirectMessages() {
     const avatar = m.side === "staff" ? `<img class="direct-chat-grade-avatar" src="${escapeAttr(room.peerGradeAsset || "")}" alt="">` : "";
     return `<p class="${escapeAttr(m.side)}" data-message-id="${escapeAttr(m.id)}">${avatar}<b>${escapeHtml(m.displayName || "회원")}</b>${action}${text}${image}</p>`;
   }).join("") || directChatEmpty("아직 대화가 없습니다.");
+  if (room.systemOnly) directChatLog.insertAdjacentHTML("beforeend", `<p class="direct-chat-empty direct-chat-readonly">${escapeHtml(room.readOnlyMessage || "답장이 불가한 채팅입니다.")}</p>`);
   directChatLog.scrollTop = directChatLog.scrollHeight;
   loadDirectRooms();
 }
@@ -914,8 +993,8 @@ async function openDirectRoom(roomId) {
   directChatBack?.removeAttribute("hidden");
   if (directChatRooms) directChatRooms.hidden = true;
   if (directChatLog) directChatLog.hidden = false;
-  if (directChatSend) directChatSend.hidden = false;
   await loadDirectMessages();
+  if (directChatSend) directChatSend.hidden = $(".direct-chat-readonly", directChatLog) !== null;
 }
 
 async function openDirectChat(roomId = null) {
