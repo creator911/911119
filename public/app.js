@@ -531,8 +531,8 @@ $$("[data-trade-game-picker]").forEach((picker) => {
     event.preventDefault();
     const games = await loadTradeGameSuggestions(picker, input.value.trim()).catch(() => []);
     if (games[0]?.slug) {
-      const base = picker.dataset.composeType === "buy" ? "/buy" : "/sell";
-      location.href = `${base}?game=${encodeURIComponent(games[0].slug)}`;
+        const base = picker.dataset.composeType === "admin" ? "/admin_write" : picker.dataset.composeType === "buy" ? "/buy" : "/sell";
+        location.href = `${base}?game=${encodeURIComponent(games[0].slug)}`;
     }
   });
   button?.addEventListener("click", () => {
@@ -544,7 +544,7 @@ document.addEventListener("click", (event) => {
   const gameButton = event.target.closest("[data-trade-game-select]");
   if (gameButton) {
     const picker = gameButton.closest("[data-trade-game-picker]");
-    const base = picker?.dataset.composeType === "buy" ? "/buy" : "/sell";
+    const base = picker?.dataset.composeType === "admin" ? "/admin_write" : picker?.dataset.composeType === "buy" ? "/buy" : "/sell";
     location.href = `${base}?game=${encodeURIComponent(gameButton.dataset.tradeGameSelect)}`;
     return;
   }
@@ -574,7 +574,7 @@ if (noticeForm) {
   });
 }
 
-$$('form[data-form="sell"], form[data-form="buy"]').forEach((form) => {
+$$('form[data-form="sell"], form[data-form="buy"], form[data-form="admin-trade"]').forEach((form) => {
   const editor = $("[data-trade-editor]", form);
   editor?.addEventListener("input", () => syncTradeEditor(form));
   $("[data-trade-file]", form)?.addEventListener("change", (event) => {
@@ -894,7 +894,7 @@ $$("form[data-form]").forEach((form) => {
     const message = $(".form-message", form);
     try {
       const type = form.dataset.form;
-      if (type === "sell" || type === "buy") syncTradeEditor(form);
+      if (type === "sell" || type === "buy" || type === "admin-trade") syncTradeEditor(form);
       const data = formData(form);
       if (type === "login") {
         await post("/api/login", data);
@@ -917,6 +917,12 @@ $$("form[data-form]").forEach((form) => {
         const doneMessage = type === "sell" ? "판매글이 등록되었습니다." : "구매글이 등록되었습니다.";
         sessionStorage.setItem("topMessage", JSON.stringify({ text: doneMessage, tone: type }));
         location.href = "/";
+      } else if (type === "admin-trade") {
+        data.description = form.elements.description?.value || "";
+        data.descriptionText = form.elements.descriptionText?.value || "";
+        await post("/api/admin/trade", data);
+        message.textContent = "관리자 거래글이 등록되었습니다.";
+        setTimeout(() => location.reload(), 450);
       } else if (type === "charge" || type === "withdraw") {
         if (type === "charge") {
           if (!form.reportValidity()) return;
@@ -1308,12 +1314,12 @@ async function loadStaffRooms() {
   list.innerHTML = rooms.map((room) => {
     const unread = Number(room.staffUnread || 0);
     const realName = room.realName || room.name || "-";
-    return `<button class="room-row ${activeRoom === room.id ? "active" : ""} ${unread ? "has-unread" : ""}" data-room="${room.id}">
-    <span class="room-row-head"><b>${escapeHtml(room.memberName || room.username)}</b><i>${escapeHtml([room.displayGrade || "-", room.internalGrade || "-", realName].join(" · "))}</i></span>${unread ? `<em>${unread}</em>` : ""}<small>${escapeHtml(room.lastMessage || "새 상담")}</small>
+    const adminPrefix = room.adminManagedTrade ? `[\uAD00\uB9AC\uC790\uAE00] ${escapeHtml(room.tradeTitle || "")} \u00B7 ` : "";
+    return `<button class="room-row ${activeRoom === room.id ? "active" : ""} ${unread ? "has-unread" : ""} ${room.adminManagedTrade ? "admin-trade-room" : ""}" data-room="${room.id}">
+    <span class="room-row-head"><b>${escapeHtml(room.memberName || room.username)}</b><i>${escapeHtml([room.displayGrade || "-", room.internalGrade || "-", realName].join(" \u00B7 "))}</i></span>${unread ? `<em>${unread}</em>` : ""}<small>${adminPrefix}${escapeHtml(room.lastMessage || "\uCCAB \uC0C1\uB2F4")}</small>
   </button>`;
-  }).join("") || "<p class='empty'>상담방이 없습니다.</p>";
+  }).join("") || "<p class='empty'>\uC0C1\uB2F4\uBC29\uC774 \uC5C6\uC2B5\uB2C8\uB2E4.</p>";
 }
-
 async function loadStaffMessages() {
   if (!activeRoom) return;
   const res = await fetch(`/api/chat/staff/${activeRoom}`);

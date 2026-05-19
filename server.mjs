@@ -593,6 +593,29 @@ function tradeCollection(db, type) {
   return type === "sell" ? db.sellPosts || [] : db.buyPosts || [];
 }
 
+function ownerAccount(db) {
+  return (db.users || []).find((item) => item.role === "OWNER") || null;
+}
+
+function tradeSettlementUser(db, post) {
+  return (db.users || []).find((item) => item.id === (post.settlementUserId || post.userId)) || null;
+}
+
+function tradeDisplayMember(db, post) {
+  const member = (db.users || []).find((item) => item.id === post.userId);
+  return {
+    nickname: post.displayNickname || member?.nickname || "회원",
+    displayGrade: post.displayGrade || member?.displayGrade || "브론즈",
+    user: member
+  };
+}
+
+function adminTradeStatusValue(type, state) {
+  if (state === "progress") return type === "sell" ? "판매 진행중" : "구매 진행중";
+  if (state === "done") return type === "sell" ? "판매완료" : "구매완료";
+  return type === "sell" ? "판매중" : "구매중";
+}
+
 function normalizePostStatusForType(status = "", type = "sell") {
   const compact = String(status || "").replace(/\s/g, "");
   if (type === "sell") {
@@ -610,7 +633,7 @@ function tradeEscrowHold(db, post, type) {
   if (post.escrowHeld) return { ok: true };
   const amount = Math.max(0, Math.floor(Number(post.price || 0)));
   if (!amount) return { ok: false, error: "거래 금액을 확인하세요." };
-  const owner = db.users.find((item) => item.id === post.userId);
+  const owner = tradeSettlementUser(db, post);
   const counterparty = db.users.find((item) => item.id === post.counterpartyId);
   if (!owner || !counterparty) return { ok: false, error: "거래 회원 정보를 찾을 수 없습니다." };
   const payer = type === "sell" ? counterparty : owner;
@@ -631,7 +654,7 @@ function tradeMileageTransfer(db, post, type) {
   if (post.pointTransferred) return { ok: true };
   const amount = Math.max(0, Math.floor(Number(post.escrowAmount || post.price || 0)));
   if (!amount) return { ok: false, error: "거래 금액을 확인하세요." };
-  const owner = db.users.find((item) => item.id === post.userId);
+  const owner = tradeSettlementUser(db, post);
   const counterparty = db.users.find((item) => item.id === post.counterpartyId);
   if (!owner || !counterparty) return { ok: false, error: "거래 회원 정보를 찾을 수 없습니다." };
   const payer = type === "sell" ? counterparty : owner;
@@ -671,6 +694,11 @@ function notifyTradeCompleted(db, post, type) {
   const toast = `${title} 상품이 ${actionLabel} 완료되었습니다. 마일리지를 확인해 주세요.`;
   const chatMessage = `${title}\n거래가 완료되었습니다.\n마일리지를 확인해 주세요.`;
   const tone = type === "sell" ? "sell" : "buy";
+  if (post.adminManaged) {
+    if (post.counterpartyId) addUserNotification(db, post.counterpartyId, toast, tone);
+    addAdminManagedTradeCompleteMessage(db, post, type);
+    return { message: toast, tone };
+  }
   [...new Set([post.userId, post.counterpartyId].filter(Boolean))].forEach((userId) => {
     addSystemDirectNotice(db, userId, post, type, chatMessage);
     addUserNotification(db, userId, toast, tone);
@@ -684,6 +712,7 @@ function notifyTradeRequested(db, post, type, requester) {
   const nickname = requester?.nickname || "회원";
   const message = `${nickname}님께서 ${title} ${actionLabel} 요청하셨습니다.`;
   const tone = type === "sell" ? "sell" : "buy";
+  if (post.adminManaged) return { message, tone };
   addSystemDirectNotice(db, post.userId, post, type, message);
   addUserNotification(db, post.userId, message, tone);
   return { message, tone };
@@ -694,7 +723,9 @@ function addTradeRequestGreeting(db, post, type, requester) {
   if (!result?.room) return null;
   const actionLabel = type === "sell" ? "구매" : "판매";
   const title = post.title || "거래 상품";
-  addDirectMessage(db, result.room, requester, `안녕하세요.\n${title}\n${actionLabel} 요청 드렸습니다.\n거래 희망합니다.`);
+  const message = `안녕하세요.\n${title}\n${actionLabel} 요청 드렸습니다.\n거래 희망합니다.`;
+  if (result.room.adminManagedTrade) addAdminManagedMemberMessage(db, result.room, requester, message);
+  else addDirectMessage(db, result.room, requester, message);
   return result.room;
 }
 
@@ -771,6 +802,25 @@ function directChatMeta(db, room, user) {
       readOnlyMessage: "답장이 불가한 채팅입니다."
     };
   }
+  if (room.adminManagedTrade) {
+    const post = directChatPost(db, room);
+    const nickname = room.displayNickname || post?.displayNickname || "관리자";
+    const grade = room.displayGrade || post?.displayGrade || "마스터";
+    return {
+      id: room.id,
+      tradeType: room.tradeType,
+      postId: room.postId,
+      tradeTitle: post?.title || room.tradeTitle || "거래글",
+      peerId: "admin-managed",
+      peerNickname: nickname,
+      peerGrade: grade,
+      peerGradeAsset: gradeAsset(grade),
+      lastMessage: room.lastMessage || "",
+      lastAt: room.lastAt || room.createdAt,
+      unread: Number(room.unreadBy?.[user.id] || 0),
+      adminManagedTrade: true
+    };
+  }
   const peerId = (room.participantIds || []).find((idValue) => idValue !== user.id);
   const peer = db.users?.find((item) => item.id === peerId);
   const post = directChatPost(db, room);
@@ -792,6 +842,116 @@ function directChatMeta(db, room, user) {
 function findDirectRoom(db, roomId, user) {
   const room = (db.directChatRooms || []).find((item) => item.id === roomId && (item.participantIds || []).includes(user.id));
   return room || null;
+}
+
+function ensureAdminManagedDirectRoom(db, user, type, post) {
+  if (!user || !post) return null;
+  if (post.userId === user.id) return { error: "본인이 등록한 글입니다." };
+  db.chatRooms ||= [];
+  db.chatMessages ||= [];
+  db.directChatRooms ||= [];
+  const roomKey = `admin-trade:${type}:${post.id}:${user.id}`;
+  let supportRoom = db.chatRooms.find((room) => room.adminManagedTrade && room.roomKey === roomKey);
+  if (!supportRoom) {
+    supportRoom = {
+      id: id("room"),
+      roomKey,
+      userId: user.id,
+      status: "진행중",
+      adminManagedTrade: true,
+      tradeType: type,
+      postId: post.id,
+      tradeTitle: post.title || "거래글",
+      displayNickname: post.displayNickname || "관리자",
+      displayGrade: post.displayGrade || "마스터",
+      staffUnread: 0,
+      memberUnread: 0,
+      lastMessage: "",
+      lastAt: now(),
+      createdAt: now()
+    };
+    db.chatRooms.push(supportRoom);
+  }
+  let room = db.directChatRooms.find((item) => item.adminManagedTrade && item.roomKey === roomKey);
+  if (!room) {
+    room = {
+      id: id("direct"),
+      roomKey,
+      adminManagedTrade: true,
+      supportRoomId: supportRoom.id,
+      tradeType: type,
+      postId: post.id,
+      tradeTitle: post.title || "거래글",
+      ownerId: post.userId,
+      starterId: user.id,
+      participantIds: [user.id],
+      displayNickname: post.displayNickname || "관리자",
+      displayGrade: post.displayGrade || "마스터",
+      unreadBy: { [user.id]: 0 },
+      lastMessage: supportRoom.lastMessage || "",
+      lastAt: supportRoom.lastAt || now(),
+      createdAt: now()
+    };
+    db.directChatRooms.push(room);
+  }
+  supportRoom.directRoomId = room.id;
+  room.supportRoomId = supportRoom.id;
+  return { room };
+}
+
+function syncAdminManagedDirectRoom(db, supportRoom, senderType = "") {
+  if (!supportRoom?.adminManagedTrade) return null;
+  const directRoom = (db.directChatRooms || []).find((room) => room.id === supportRoom.directRoomId || room.supportRoomId === supportRoom.id);
+  if (!directRoom) return null;
+  directRoom.lastMessage = supportRoom.lastMessage || "";
+  directRoom.lastAt = supportRoom.lastAt || now();
+  directRoom.tradeTitle = supportRoom.tradeTitle || directRoom.tradeTitle;
+  directRoom.displayNickname = supportRoom.displayNickname || directRoom.displayNickname;
+  directRoom.displayGrade = supportRoom.displayGrade || directRoom.displayGrade;
+  directRoom.unreadBy ||= {};
+  if (senderType === "staff") {
+    directRoom.participantIds.forEach((idValue) => {
+      directRoom.unreadBy[idValue] = Number(directRoom.unreadBy[idValue] || 0) + 1;
+    });
+  }
+  return directRoom;
+}
+
+function addAdminManagedMemberMessage(db, directRoom, user, message, attachment = null) {
+  const supportRoom = (db.chatRooms || []).find((room) => room.id === directRoom.supportRoomId);
+  if (!supportRoom) return null;
+  addMessage(db, supportRoom, user, "member", message, attachment);
+  syncAdminManagedDirectRoom(db, supportRoom, "member");
+  return supportRoom;
+}
+
+function addAdminManagedTradeCompleteMessage(db, post, type) {
+  if (!post?.adminManaged || !post.counterpartyId) return null;
+  const counterparty = (db.users || []).find((item) => item.id === post.counterpartyId);
+  const staffUser = ownerAccount(db) || (db.users || []).find((item) => canStaff(item));
+  if (!counterparty || !staffUser) return null;
+  const result = ensureAdminManagedDirectRoom(db, counterparty, type, post);
+  if (!result?.room) return null;
+  const supportRoom = (db.chatRooms || []).find((room) => room.id === result.room.supportRoomId);
+  if (!supportRoom) return null;
+  const text = "\uAC70\uB798\uAC00 \uC644\uB8CC\uB418\uC5C8\uC2B5\uB2C8\uB2E4. (\uC0C1\uB300\uC5D0\uAC8C\uB294 \uC774 \uCC44\uD305\uC740 \uBCF4\uC774\uC9C0 \uC54A\uC2B5\uB2C8\uB2E4)";
+  db.chatMessages.push({
+    id: id("msg"),
+    roomId: supportRoom.id,
+    senderType: "staff",
+    userId: supportRoom.userId,
+    staffId: staffUser.id,
+    internalStaffName: staffUser.nickname,
+    displayName: "\uC544\uC774\uD15C\uC874 \uC0C1\uB2F4\uC0AC",
+    message: text,
+    attachment: null,
+    staffOnly: true,
+    createdAt: now(),
+    read: true
+  });
+  supportRoom.lastMessage = text;
+  supportRoom.lastAt = now();
+  return supportRoom;
 }
 
 function addSystemDirectNotice(db, userId, post, type, message) {
@@ -842,6 +1002,7 @@ function ensureDirectRoom(db, user, type, postId) {
   const found = findTradePost(db, type, postId);
   if (!found) return null;
   const { post } = found;
+  if (post.adminManaged) return ensureAdminManagedDirectRoom(db, user, found.type, post);
   const isOwner = post.userId === user.id;
   const peerId = isOwner ? post.counterpartyId : user.id;
   if (isOwner && !peerId) return { error: "거래 요청자가 정해진 뒤 채팅을 시작할 수 있습니다." };
@@ -1046,7 +1207,7 @@ function legacyTradeComposePage(user, type, db, selectedSlug = "") {
 }
 
 function renderTradeCard(post, db, owner = false) {
-  const member = db.users?.find((item) => item.id === post.userId);
+  const displayMember = tradeDisplayMember(db, post);
   const sideLabel = tradeTypeLabel(post.type);
   const statusOptions = post.type === "sell" ? ["판매중", "판매 진행중", "판매완료", "숨김"] : ["구매중", "구매 진행중", "구매완료", "숨김"];
   const status = post.status || (post.type === "sell" ? "판매중" : "구매중");
@@ -1057,7 +1218,7 @@ function renderTradeCard(post, db, owner = false) {
     <h3>${esc(post.title || "제목 없음")}</h3>
     <p>${esc(post.gameName || post.game)} · ${esc(post.server || "서버전체")}</p>
     <strong>${won(post.price)}</strong>
-    <small>${esc(member?.nickname || "회원")} · ${new Date(post.createdAt).toLocaleDateString("ko-KR")}</small>
+    <small>${esc(displayMember.nickname)} · ${new Date(post.createdAt).toLocaleDateString("ko-KR")}</small>
     ${owner ? `<label class="status-update">상태<select data-trade-status="${esc(post.id)}" data-trade-type="${post.type}">${statusOptions.map((item) => `<option value="${esc(item)}" ${item === status ? "selected" : ""}>${esc(tradeStatusLabel(item, post.type) || item)}</option>`).join("")}</select></label>` : ""}
   </article>`;
 }
@@ -1282,7 +1443,8 @@ function tradeDetailPage(user, db, type, postId) {
   const found = findTradePost(db, type, postId);
   if (!found) return layout("거래글 없음", user, `<main class="trade-detail-page"><section class="trade-detail-card"><h1>거래글을 찾을 수 없습니다.</h1><a class="notice-list-button" href="/games">목록</a></section>${chatWidget(user)}</main>`, "trade");
   const { post } = found;
-  const member = db.users?.find((item) => item.id === post.userId);
+  const member = tradeSettlementUser(db, post);
+  const displayMember = tradeDisplayMember(db, post);
   const game = db.games?.find((item) => item.slug === post.gameSlug);
   const status = post.status || (type === "sell" ? "판매중" : "구매중");
   const displayStatus = tradeStatusLabel(status, type);
@@ -1338,9 +1500,9 @@ function tradeDetailPage(user, db, type, postId) {
         <section class="trade-detail-section">
           <div class="trade-detail-section-head"><h2>${memberTitle}</h2></div>
           <div class="trade-member-card">
-            <img src="${gradeAsset(member?.displayGrade || "브론즈")}" alt="${esc(member?.displayGrade || "브론즈")}">
-            <strong>${esc(member?.displayGrade || "브론즈")}</strong>
-            <span>${esc(member?.nickname || "회원")}</span>
+            <img src="${gradeAsset(displayMember.displayGrade)}" alt="${esc(displayMember.displayGrade)}">
+            <strong>${esc(displayMember.displayGrade)}</strong>
+            <span>${esc(displayMember.nickname)}</span>
           </div>
         </section>
         <section class="trade-detail-section trade-detail-section--body">
@@ -1483,9 +1645,9 @@ function homePage(user, db) {
           <a class="summary-count-row" href="/mypage"><span>판매/구매대기</span><b class="orange">${userWaitingCount.toLocaleString()}개</b></a>
         </div>
         <nav class="quick-actions">
-          <a href="/charge"><img src="/assets/quick/point-charge.png" alt=""><span>충전</span></a>
-          <a href="/withdraw"><img src="/assets/quick/point-withdraw.png" alt=""><span>출금</span></a>
-          <a href="/support" data-open-chat><img src="/assets/quick/support-agent.png" alt=""><span>1:1 톡</span></a>
+          <a href="/charge"><img src="/assets/quick/quick-charge-card.png" alt=""><span>충전</span></a>
+          <a href="/withdraw"><img src="/assets/quick/quick-withdraw-card.png" alt=""><span>출금</span></a>
+          <a href="/support" data-open-chat><img src="/assets/quick/quick-talk-card.png" alt=""><span>1:1 톡</span></a>
         </nav>` : `<form class="home-login" data-form="login">
           <h2>안전한 게임 거래의 시작</h2>
           <label>아이디<input name="username" placeholder="아이디를 입력하세요" required></label>
@@ -1693,6 +1855,107 @@ function registerPage(user, type, db, selectedSlug = "") {
   </main>${chatWidget(user)}`, "trade");
 }
 
+function adminWritePage(user, db, selectedSlug = "") {
+  const games = (db.games || []).filter((game) => game.visible !== false);
+  const selectedGame = games.find((game) => game.slug === selectedSlug) || games[0] || {};
+  const servers = gameServerList(selectedGame);
+  const tradeKinds = gameTradeKinds(selectedGame);
+  const units = gameFilterList(selectedGame).find((filter) => filter.label === "판매 단위")?.values || ["일반", "분할"];
+  const nowValue = new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+  const owner = ownerAccount(db);
+  const memberOptions = (db.users || [])
+    .filter((item) => item.id !== owner?.id)
+    .map((item) => `<option value="${esc(item.id)}">${esc(item.nickname || item.username)} (${esc(item.username || "-")})</option>`)
+    .join("");
+  const gradeOptions = ["브론즈", "실버", "골드", "플레티넘", "다이아", "마스터", "챌린저"]
+    .map((grade) => `<option value="${esc(grade)}" ${grade === (owner?.displayGrade || "마스터") ? "selected" : ""}>${esc(grade)}</option>`)
+    .join("");
+  return layout("관리자 글 작성", user, `<main class="trade-compose-page admin-write-page" ${gameThemeStyle(selectedGame)}>
+    <form class="trade-compose admin-trade-compose" data-form="admin-trade">
+      <section class="trade-compose__hero">
+        <img src="${gameImage(selectedGame)}" alt="">
+        <div><p>관리자 권한으로 거래글을 등록합니다.</p><h1>글 작성(관리자권한)</h1><span>${esc(selectedGame.name || "게임 선택")}</span></div>
+        <a href="/admin">관리자</a>
+      </section>
+      <section class="trade-compose__body">
+        <div class="compose-field full">
+          <b>등록 유형</b>
+          <div class="segmented"><label><input type="radio" name="type" value="sell" checked><span>판매등록</span></label><label><input type="radio" name="type" value="buy"><span>구매등록</span></label></div>
+        </div>
+        <div class="compose-field full">
+          <b>게임</b>
+          <div class="trade-game-picker" data-trade-game-picker data-compose-type="admin">
+            <input type="hidden" name="gameSlug" value="${esc(selectedGame.slug || "")}" required>
+            <div class="trade-game-current">
+              <img src="${gameImage(selectedGame)}" alt="">
+              <div><span>현재 선택</span><strong>${esc(selectedGame.name || "게임 선택")}</strong></div>
+            </div>
+            <div class="trade-game-search">
+              <input type="search" data-trade-game-search placeholder="게임명 또는 초성으로 검색하세요" autocomplete="off">
+              <button type="button" data-trade-game-search-button>검색</button>
+            </div>
+            <div class="trade-game-suggest" data-trade-game-suggest aria-label="게임 추천 검색어"></div>
+          </div>
+        </div>
+        <div class="compose-field full admin-write-settings">
+          <b>관리자 설정</b>
+          <div class="admin-write-grid">
+            <label>작성일시<input type="datetime-local" name="createdAt" value="${nowValue}" required></label>
+            <label>표시 닉네임<input name="displayNickname" value="${esc(owner?.nickname || "관리자")}" required></label>
+            <label>표시 등급<select name="displayGrade">${gradeOptions}</select></label>
+            <label>거래 상태<select name="tradeStatus"><option value="open">미거래중</option><option value="progress">거래 진행중</option><option value="done">거래완료</option></select></label>
+            <label>상대 회원<select name="counterpartyId"><option value="">선택 안 함</option>${memberOptions}</select></label>
+          </div>
+        </div>
+        <div class="compose-field full">
+          <b>구분</b>
+          <div class="segmented">${tradeKinds.map((item, index) => `<label><input type="radio" name="tradeKind" value="${esc(item)}" ${index === 0 ? "checked" : ""}><span>${esc(item)}</span></label>`).join("")}</div>
+        </div>
+        <div class="compose-field full">
+          <b>서버</b>
+          <div class="chip-grid">${servers.map((item, index) => `<label><input type="radio" name="server" value="${esc(item)}" ${index === 0 ? "checked" : ""}><span>${esc(item)}</span></label>`).join("")}</div>
+        </div>
+        <div class="compose-field compose-field--unit">
+          <b>단위</b>
+          <div class="segmented compact">${units.map((item, index) => `<label><input type="radio" name="unit" value="${esc(item)}" ${index === 0 ? "checked" : ""}><span>${esc(item)}</span></label>`).join("")}</div>
+        </div>
+        <div class="compose-field compose-field--price">
+          <b>가격</b>
+          <div class="price-entry"><input name="price" type="number" min="0" step="1000" placeholder="거래 금액" required><span>원</span></div>
+          <div class="price-presets"><button type="button" data-price-preset="10000">+1만원</button><button type="button" data-price-preset="50000">+5만원</button><button type="button" data-price-preset="100000">+10만원</button><button type="button" data-price-preset="500000">+50만원</button></div>
+        </div>
+        <div class="compose-field compose-field--quantity">
+          <b>캐릭터·수량</b>
+          <div class="quantity-stack"><input name="characterName" placeholder="캐릭터명 또는 품목명"><input name="quantity" type="number" min="1" step="1" placeholder="수량"></div>
+        </div>
+        <div class="compose-field full">
+          <b>제목</b>
+          <input name="title" placeholder="제목을 입력해주세요." required>
+        </div>
+        <div class="compose-field full compose-field--editor">
+          <b>내용</b>
+          <div class="trade-editor-wrap">
+            <div class="notice-editor-toolbar trade-editor-toolbar">
+              <select data-trade-font><option value="Malgun Gothic">맑은 고딕</option><option value="Noto Sans KR">본고딕</option><option value="Arial">Arial</option><option value="serif">명조</option><option value="monospace">고정폭</option></select>
+              <select data-trade-size><option>10</option><option>12</option><option>14</option><option selected>16</option><option>18</option><option>20</option><option>24</option><option>32</option><option>36</option></select>
+              <select data-trade-weight><option value="400">보통</option><option value="700">굵게</option><option value="900">아주 굵게</option></select>
+              <button type="button" class="trade-tool-icon trade-tool-bold" data-trade-command="bold" title="굵게">B</button>
+              <button type="button" class="trade-tool-icon trade-tool-underline" data-trade-command="underline" title="밑줄">U</button>
+              <button type="button" class="trade-editor-apply" data-trade-apply>선택 텍스트 적용</button>
+              <button type="button" class="trade-editor-photo" data-trade-image>사진첨부</button>
+              <input type="file" accept="image/*" data-trade-file hidden>
+            </div>
+            <div class="notice-rich-editor trade-rich-editor" contenteditable="true" data-trade-editor aria-label="거래글 내용 편집기"></div>
+            <input type="hidden" name="description">
+            <input type="hidden" name="descriptionText">
+          </div>
+        </div>
+      </section>
+      <section class="trade-compose__actions"><a href="/admin">취소</a><button>관리자 글 등록</button><p class="form-message"></p></section>
+    </form>
+  </main>${chatWidget(user)}`, "trade");
+}
+
 function pointPage(user, db, type) {
   const charge = type === "charge";
   const balance = Number(user?.points || 0);
@@ -1895,6 +2158,7 @@ function adminPage(user, db, paging = {}) {
       <button type="button" data-admin-panel-toggle="account">계좌번호등록</button>
       <button type="button" data-admin-panel-toggle="staff">운영진계정생성</button>
       <button type="button" data-admin-panel-toggle="notice">공지사항관리</button>
+      <a href="/admin_write">글 작성(관리자권한)</a>
     </nav>
     <section class="admin-grid">
       <form class="panel account-admin-form admin-collapsible-panel" data-admin-panel="account" data-form="site" hidden><h2>계좌번호 등록</h2>
@@ -2102,6 +2366,62 @@ async function api(req, res, db, user, pathname) {
     }
     if (pathname === "/api/logout" && req.method === "POST") return send(res, 200, { ok: true }, { "Set-Cookie": "session=; Path=/; Max-Age=0" });
     if (pathname === "/api/me") return send(res, 200, { user: user && publicUser(user) });
+    if (pathname === "/api/admin/trade" && req.method === "POST") {
+      if (!protect(user, "admin")) return send(res, 403, { error: "권한이 없습니다." });
+      const data = await body(req);
+      const type = data.type === "buy" ? "buy" : "sell";
+      const game = (db.games || []).find((item) => item.slug === data.gameSlug);
+      if (!game) return send(res, 400, { error: "게임을 선택하세요." });
+      const owner = ownerAccount(db);
+      if (!owner) return send(res, 400, { error: "오너 계정을 찾을 수 없습니다." });
+      const state = ["open", "progress", "done"].includes(data.tradeStatus) ? data.tradeStatus : "open";
+      const needsCounterparty = state === "progress" || state === "done";
+      const counterparty = data.counterpartyId ? (db.users || []).find((item) => item.id === data.counterpartyId) : null;
+      if (needsCounterparty && !counterparty) return send(res, 400, { error: "거래 진행중/완료 상태는 상대 회원을 선택해야 합니다." });
+      if (counterparty?.id === owner.id) return send(res, 400, { error: "상대 회원은 오너 계정과 달라야 합니다." });
+      const descriptionHtml = sanitizeNoticeHtml(String(data.description || "").trim());
+      const descriptionText = String(data.descriptionText || "").trim();
+      const row = {
+        id: id(type),
+        userId: owner.id,
+        settlementUserId: owner.id,
+        adminAuthorId: user.id,
+        adminManaged: true,
+        displayNickname: String(data.displayNickname || owner.nickname || "관리자").trim(),
+        displayGrade: String(data.displayGrade || owner.displayGrade || "마스터").trim(),
+        gameSlug: game.slug,
+        gameName: game.name,
+        game: game.name,
+        server: data.server || "서버전체",
+        tradeKind: tradeKindLabel(data.tradeKind),
+        category: tradeKindLabel(data.tradeKind),
+        unit: data.unit || "일반",
+        characterName: data.characterName || "",
+        quantity: data.quantity ? Number(data.quantity) : null,
+        title: data.title,
+        description: descriptionHtml,
+        descriptionHtml,
+        descriptionText,
+        price: Number(data.price),
+        status: adminTradeStatusValue(type, state),
+        createdAt: noticeCreatedAt(data.createdAt)
+      };
+      if (counterparty) row.counterpartyId = counterparty.id;
+      if (state === "progress" || state === "done") {
+        const escrow = tradeEscrowHold(db, row, type);
+        if (!escrow.ok) return send(res, 400, { error: escrow.error });
+      }
+      if (state === "done") {
+        const transfer = tradeMileageTransfer(db, row, type);
+        if (!transfer.ok) return send(res, 400, { error: transfer.error });
+        row.completedBy = counterparty.id;
+        row.completedAt = now();
+        addAdminManagedTradeCompleteMessage(db, row, type);
+      }
+      db[type === "sell" ? "sellPosts" : "buyPosts"].push(row);
+      await writeDb(db);
+      return send(res, 200, { ok: true });
+    }
     if (pathname === "/api/trade" && req.method === "POST") {
       if (!protect(user, "member")) return send(res, 401, { error: "로그인이 필요합니다." });
       const data = await body(req);
@@ -2427,6 +2747,17 @@ async function api(req, res, db, user, pathname) {
       const room = findDirectRoom(db, roomId, user);
       if (!room) return send(res, 404, { error: "채팅방을 찾을 수 없습니다." });
       const data = await body(req);
+      if (room.adminManagedTrade) {
+        const message = (db.chatMessages || []).find((item) => item.id === data.id && item.roomId === room.supportRoomId && item.senderType === "member" && item.userId === user.id);
+        if (!message) return send(res, 404, { error: "삭제할 메시지가 없습니다." });
+        message.deletedByMember = true;
+        message.deletedAt = now();
+        const latest = (db.chatMessages || []).filter((item) => item.roomId === room.supportRoomId && !item.deletedByMember).at(-1);
+        room.lastMessage = latest ? latest.message || (latest.attachment ? `첨부파일: ${latest.attachment.name}` : "") : "";
+        room.lastAt = latest?.createdAt || now();
+        await writeDb(db);
+        return send(res, 200, { ok: true });
+      }
       const message = (db.directChatMessages || []).find((item) => item.id === data.id && item.roomId === room.id && item.senderId === user.id);
       if (!message) return send(res, 404, { error: "삭제할 메시지가 없습니다." });
       message.deleted = true;
@@ -2446,6 +2777,17 @@ async function api(req, res, db, user, pathname) {
       room.unreadBy ||= {};
       let changed = Number(room.unreadBy[user.id] || 0) !== 0;
       room.unreadBy[user.id] = 0;
+      if (room.adminManagedTrade) {
+        (db.chatMessages || []).forEach((message) => {
+          if (message.roomId === room.supportRoomId && message.senderType === "staff" && !message.read) {
+            message.read = true;
+            message.readAt = now();
+            changed = true;
+          }
+        });
+        if (changed) await writeDb(db);
+        return send(res, 200, { room: directChatMeta(db, room, user), messages: directMessages(db, room, user) });
+      }
       (db.directChatMessages || []).forEach((message) => {
         if (message.roomId === room.id && message.senderId !== user.id) {
           message.readBy ||= [];
@@ -2465,18 +2807,19 @@ async function api(req, res, db, user, pathname) {
       if (!room) return send(res, 404, { error: "채팅방을 찾을 수 없습니다." });
       if (room.systemOnly) return send(res, 403, { error: "답장이 불가한 채팅입니다." });
       const data = await body(req);
-      addDirectMessage(db, room, user, data.message, data.attachment);
+      if (room.adminManagedTrade) addAdminManagedMemberMessage(db, room, user, data.message, data.attachment);
+      else addDirectMessage(db, room, user, data.message, data.attachment);
       await writeDb(db);
       return send(res, 200, { ok: true });
     }
     if (pathname === "/api/chat/member/unread" && req.method === "GET") {
       if (!protect(user, "member")) return send(res, 401, { error: "로그인이 필요합니다." });
-      const room = (db.chatRooms || []).find((item) => item.userId === user.id);
+      const room = (db.chatRooms || []).find((item) => item.userId === user.id && !item.adminManagedTrade);
       return send(res, 200, { unread: Number(room?.memberUnread || 0) });
     }
     if (pathname === "/api/chat/member" && req.method === "GET") {
       if (!protect(user, "member")) return send(res, 401, { error: "로그인이 필요합니다." });
-      const room = (db.chatRooms || []).find((item) => item.userId === user.id && item.status !== "종료");
+      const room = (db.chatRooms || []).find((item) => item.userId === user.id && !item.adminManagedTrade && item.status !== "종료");
       if (!room) return send(res, 200, { messages: [supportGreetingMessage()] });
       const unreadStaffMessages = db.chatMessages.filter((m) => m.roomId === room.id && m.senderType === "staff" && !m.read);
       if (unreadStaffMessages.length || room.memberUnread) {
@@ -2505,9 +2848,9 @@ async function api(req, res, db, user, pathname) {
     }
     if (pathname === "/api/chat/staff" && req.method === "GET") {
       if (!protect(user, "staff")) return send(res, 403, { error: "권한이 없습니다." });
-      const rooms = db.chatRooms.filter((r) => db.chatMessages.some((m) => m.roomId === r.id)).map((r) => {
+      const rooms = db.chatRooms.filter((r) => r.adminManagedTrade || db.chatMessages.some((m) => m.roomId === r.id)).map((r) => {
         const member = db.users.find((u) => u.id === r.userId);
-        return { ...r, memberName: member?.nickname, username: member?.username, realName: member?.name || "", name: member?.name || "", displayGrade: member?.displayGrade, internalGrade: normalizeInternalGrade(member?.internalGrade) };
+        return { ...r, memberName: member?.nickname, username: member?.username, realName: member?.name || "", name: member?.name || "", displayGrade: member?.displayGrade, internalGrade: normalizeInternalGrade(member?.internalGrade), adminManagedTrade: Boolean(r.adminManagedTrade), tradeTitle: r.tradeTitle || "" };
       }).sort((a, b) => String(b.lastAt).localeCompare(String(a.lastAt)));
       return send(res, 200, { rooms });
     }
@@ -2573,7 +2916,7 @@ function publicUser(user) {
 }
 
 function ensureRoom(db, user) {
-  let room = db.chatRooms.find((r) => r.userId === user.id && r.status !== "종료");
+  let room = db.chatRooms.find((r) => r.userId === user.id && !r.adminManagedTrade && r.status !== "종료");
   if (!room) {
     room = { id: id("room"), userId: user.id, status: "진행중", staffUnread: 0, memberUnread: 0, lastMessage: "", lastAt: now(), createdAt: now() };
     db.chatRooms.push(room);
@@ -2590,6 +2933,7 @@ function addMessage(db, room, user, senderType, message, attachment = null) {
   room.lastMessage = text || `첨부파일: ${file.name}`; room.lastAt = now();
   if (senderType === "member") room.staffUnread += 1;
   if (senderType === "staff") room.memberUnread += 1;
+  syncAdminManagedDirectRoom(db, room, senderType);
 }
 
 function memberMessages(db, roomId) {
@@ -2614,6 +2958,23 @@ function addDirectMessage(db, room, user, message, attachment = null) {
 }
 
 function directMessages(db, room, user) {
+  if (room.adminManagedTrade) {
+    const supportRoom = (db.chatRooms || []).find((item) => item.id === room.supportRoomId);
+    const nickname = room.displayNickname || supportRoom?.displayNickname || "관리자";
+    return (db.chatMessages || []).filter((m) => m.roomId === room.supportRoomId && !m.staffOnly).map((m) => {
+      const deleted = Boolean(m.deletedByMember);
+      return {
+        id: m.id,
+        senderId: m.senderType === "member" ? user.id : "admin-managed",
+        side: m.senderType === "member" ? "member" : "staff",
+        displayName: m.senderType === "member" ? m.displayName : nickname,
+        message: deleted ? "" : m.message,
+        attachment: deleted ? null : m.attachment || null,
+        deleted,
+        createdAt: m.createdAt
+      };
+    });
+  }
   return (db.directChatMessages || []).filter((m) => m.roomId === room.id).map((m) => {
     const deleted = Boolean(m.deleted);
     return {
@@ -2684,6 +3045,7 @@ async function router(req, res) {
     pointPage: url.searchParams.get("pointPage"),
     pointSize: url.searchParams.get("pointSize")
   })) : redirect(res, "/login");
+  if (url.pathname === "/admin_write") return protect(user, "admin") ? send(res, 200, adminWritePage(user, db, url.searchParams.get("game") || "")) : redirect(res, "/login");
   if (url.pathname === "/staff") return protect(user, "staff") ? send(res, 200, staffPage(user)) : redirect(res, "/login");
   if (url.pathname === "/terms") return send(res, 200, legalPage(user, "service"));
   if (url.pathname === "/trade-terms") return send(res, 200, legalPage(user, "trade"));

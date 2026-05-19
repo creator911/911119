@@ -556,12 +556,16 @@ form button, .panel button {
 .admin-grid form { display: grid; gap: 10px; }
 .admin-tools {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 10px;
   margin-bottom: 14px;
 }
-.admin-tools button {
+.admin-tools button,
+.admin-tools a {
   min-height: 38px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   border: 1px solid #bfd2ea;
   border-radius: 8px;
   background: #fff;
@@ -570,7 +574,8 @@ form button, .panel button {
   font-weight: 900;
 }
 .admin-tools button:hover,
-.admin-tools button.active {
+.admin-tools button.active,
+.admin-tools a:hover {
   background: #075bdc;
   border-color: #075bdc;
   color: #fff;
@@ -1103,6 +1108,13 @@ td button { margin-right: 6px; min-height: 34px; }
   padding: 10px 8px;
 }
 .room-row.active { background: #eef5ff; }
+.room-row.admin-trade-room {
+  background: #f3f4f6;
+  border-color: #d7dee8;
+}
+.room-row.admin-trade-room.active {
+  background: #e7edf5;
+}
 .room-row.has-unread {
   background: #ef4444;
   border-color: #ef4444;
@@ -2675,7 +2687,7 @@ input:focus-visible {
   border: 1px solid #d5e3f5;
   border-color: #d5e3f5;
   border-radius: 6px;
-  background: #fff;
+  background: #fafafa;
   color: inherit;
 }
 
@@ -3518,6 +3530,25 @@ input:focus-visible {
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   gap: 0;
   border-top: 1px solid #e7edf5;
+}
+
+.admin-write-grid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.admin-write-grid label {
+  display: grid;
+  gap: 6px;
+  color: #334155;
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.admin-write-grid input,
+.admin-write-grid select {
+  width: 100%;
 }
 
 .compose-field {
@@ -6211,6 +6242,11 @@ input:focus-visible {
     grid-template-columns: 1fr 1fr;
   }
 
+  .admin-tools,
+  .admin-write-grid {
+    grid-template-columns: 1fr;
+  }
+
   .admin-date-controls button {
     width: 100%;
   }
@@ -6568,7 +6604,7 @@ input:focus-visible {
 
 .mileage-summary {
   display: grid;
-  grid-template-columns: 1fr auto;
+  grid-template-columns: minmax(86px, auto) minmax(0, 1fr);
   gap: 10px 12px;
   margin: 14px 0 8px;
   padding-top: 18px;
@@ -6586,6 +6622,8 @@ input:focus-visible {
 .mileage-summary dd {
   color: #111827;
   text-align: right;
+  min-width: 0;
+  white-space: nowrap;
 }
 
 .mileage-summary dt:last-of-type,
@@ -6593,13 +6631,14 @@ input:focus-visible {
   padding-top: 10px;
   border-top: 1px dashed #d7e0ec;
   color: #111827;
-  font-size: 17px;
+  font-size: 16px;
   font-weight: 900;
 }
 
 .mileage-summary dd:last-of-type {
   color: #075bdc;
-  font-size: 26px;
+  font-size: 24px;
+  letter-spacing: 0;
 }
 
 .mileage-submit {
@@ -6987,6 +7026,14 @@ input:focus-visible {
   height: auto;
 }
 
+.mileage-request-panel {
+  align-self: stretch;
+}
+
+.mileage-form {
+  min-height: 100%;
+}
+
 .mileage-page-history {
   grid-column: 1 / -1;
   min-height: 0;
@@ -7346,6 +7393,7 @@ input:focus-visible {
 
 .charge-page .mileage-form {
   gap: 10px;
+  grid-template-rows: auto auto auto auto auto 1fr auto auto;
 }
 
 .charge-page .mileage-guide {
@@ -7354,7 +7402,7 @@ input:focus-visible {
 
 .charge-page .mileage-submit {
   min-height: 52px;
-  margin-top: 40px;
+  margin-top: 10px;
 }
 
 .charge-page .mileage-summary {
@@ -7366,8 +7414,8 @@ input:focus-visible {
 @media (min-width: 821px) {
   .charge-page .mileage-request-panel {
     min-height: 525px;
-    max-height: 525px;
-    overflow: hidden;
+    height: auto;
+    overflow: visible;
   }
 
   .charge-page .mileage-info-panel {
@@ -7594,4 +7642,56 @@ main,
 .mileage-balance-box,
 .withdraw-account-card {
   box-shadow: 0 10px 22px rgba(15, 23, 42, .06);
+}
+
+/* Member summary quick buttons use the prepared full-width card artwork. */
+.quick-grid > .quick-actions {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0;
+  width: 95%;
+  aspect-ratio: 1132 / 574;
+  justify-self: center;
+  padding: 0;
+  overflow: hidden;
+  background: url("/assets/quick/quick-actions-preview.png") center / 100% 100% no-repeat;
+  border: 0;
+  border-radius: 20px;
+  box-shadow: none;
+}
+
+.quick-grid > .quick-actions a {
+  position: relative;
+  display: block;
+  min-width: 0;
+  min-height: 0;
+  width: 100%;
+  height: 100%;
+  padding: 0;
+  overflow: hidden;
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  transition: background .16s ease, filter .16s ease;
+}
+
+.quick-grid > .quick-actions a:hover {
+  background: rgba(255, 255, 255, .18);
+  filter: brightness(1.03);
+  transform: none;
+}
+
+.quick-grid > .quick-actions a:active {
+  transform: translateY(1px);
+}
+
+.quick-grid > .quick-actions a img,
+.quick-grid > .quick-actions a span {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  opacity: 0;
+  pointer-events: none;
 }
