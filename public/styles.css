@@ -554,6 +554,28 @@ form button, .panel button {
   margin-bottom: 16px;
 }
 .admin-grid form { display: grid; gap: 10px; }
+.admin-tools {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  margin-bottom: 14px;
+}
+.admin-tools button {
+  min-height: 38px;
+  border: 1px solid #bfd2ea;
+  border-radius: 8px;
+  background: #fff;
+  color: #075bdc;
+  font-size: 13px;
+  font-weight: 900;
+}
+.admin-tools button:hover,
+.admin-tools button.active {
+  background: #075bdc;
+  border-color: #075bdc;
+  color: #fff;
+}
+.admin-collapsible-panel[hidden] { display: none; }
 .table-panel { overflow-x: auto; margin-top: 16px; }
 table { width: 100%; border-collapse: collapse; min-width: 900px; }
 th, td {
@@ -592,6 +614,66 @@ td button { margin-right: 6px; min-height: 34px; }
 
 .admin-refresh-button:hover {
   background: #eef5ff;
+}
+
+.admin-pager {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px solid #e3ebf5;
+}
+
+.admin-pager div {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+}
+
+.admin-pager a,
+.admin-pager span,
+.admin-pager b {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 28px;
+  padding: 0 10px;
+  border: 1px solid #bfd2ea;
+  border-radius: 7px;
+  background: #fff;
+  color: #075bdc;
+  font-size: 12px;
+  font-weight: 900;
+  white-space: nowrap;
+}
+
+.admin-pager span {
+  color: #94a3b8;
+  background: #f8fbff;
+}
+
+.admin-pager b {
+  color: #0f172a;
+}
+
+.admin-pager small {
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.admin-page-size {
+  margin-left: auto;
+}
+
+.admin-page-size a.active {
+  background: #075bdc;
+  border-color: #075bdc;
+  color: #fff;
 }
 
 .account-admin-form h2 {
@@ -780,35 +862,40 @@ td button { margin-right: 6px; min-height: 34px; }
 
 .admin-page .point-request-panel th:nth-child(2),
 .admin-page .point-request-panel td:nth-child(2) {
-  width: 10%;
+  width: 8%;
 }
 
 .admin-page .point-request-panel th:nth-child(3),
 .admin-page .point-request-panel td:nth-child(3) {
-  width: 9%;
+  width: 8%;
 }
 
 .admin-page .point-request-panel th:nth-child(4),
 .admin-page .point-request-panel td:nth-child(4) {
-  width: 12%;
+  width: 10%;
 }
 
 .admin-page .point-request-panel th:nth-child(5),
 .admin-page .point-request-panel td:nth-child(5) {
-  width: 33%;
+  width: 27%;
 }
 
 .admin-page .point-request-panel th:nth-child(6),
 .admin-page .point-request-panel td:nth-child(6) {
-  width: 7%;
-  min-width: 58px;
-  text-align: center;
-  white-space: nowrap;
+  width: 16%;
 }
 
 .admin-page .point-request-panel th:nth-child(7),
 .admin-page .point-request-panel td:nth-child(7) {
-  width: 27%;
+  width: 7%;
+  min-width: 64px;
+  text-align: center;
+  white-space: nowrap;
+}
+
+.admin-page .point-request-panel th:nth-child(8),
+.admin-page .point-request-panel td:nth-child(8) {
+  width: 20%;
   text-align: right;
 }
 
@@ -915,6 +1002,71 @@ td button { margin-right: 6px; min-height: 34px; }
   display: inline;
   padding: 0;
   color: #94a3b8;
+}
+
+.point-time {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+  color: #0f172a;
+  line-height: 1.2;
+}
+
+.point-time b,
+.point-time small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.point-time b {
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.point-time small {
+  color: #64748b;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.point-status {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 42px;
+  font-weight: 900;
+}
+
+.point-status.pending {
+  color: #ef1717;
+  animation: pointPendingBlink .9s ease-in-out infinite;
+}
+
+.admin-page .point-request-panel .point-row.pending td:nth-child(2),
+.admin-page .point-request-panel .point-row.pending td:nth-child(6) .point-time,
+.admin-page .point-request-panel .point-row.pending td:nth-child(6) .point-time small {
+  color: #ef1717;
+  animation: pointPendingBlink .9s ease-in-out infinite;
+}
+
+.point-status.done {
+  color: #0aa445;
+}
+
+.point-status.cancel {
+  color: #ef1717;
+}
+
+@keyframes pointPendingBlink {
+  0%, 100% {
+    opacity: 1;
+    text-shadow: 0 0 0 rgba(239, 23, 23, 0);
+  }
+  50% {
+    opacity: .36;
+    text-shadow: 0 0 9px rgba(239, 23, 23, .55);
+  }
 }
 
 .admin-page .point-request-panel td button {
@@ -5821,6 +5973,25 @@ input:focus-visible {
   font-weight: 900;
 }
 
+.admin-date-controls {
+  display: grid;
+  grid-template-columns: minmax(150px, .9fr) minmax(110px, .6fr) repeat(3, auto);
+  gap: 8px;
+  align-items: center;
+}
+
+.admin-date-controls input {
+  min-height: 38px;
+}
+
+.admin-date-controls button {
+  width: auto;
+  min-height: 38px;
+  padding: 0 14px;
+  border-radius: 8px;
+  font-size: 13px;
+}
+
 .notice-editor-toolbar {
   display: flex;
   flex-wrap: wrap;
@@ -6034,6 +6205,14 @@ input:focus-visible {
 
   .notice-editor-toolbar {
     grid-template-columns: 1fr;
+  }
+
+  .admin-date-controls {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .admin-date-controls button {
+    width: 100%;
   }
 
   .notice-editor-toolbar select,

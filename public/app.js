@@ -258,10 +258,16 @@ document.addEventListener("click", async (event) => {
     location.reload();
     return;
   }
-  const noticeToggle = event.target.closest("[data-toggle-notice-form]");
-  if (noticeToggle) {
-    const form = $(".admin-notice-form");
-    if (form) form.hidden = !form.hidden;
+  const adminPanelToggle = event.target.closest("[data-admin-panel-toggle]");
+  if (adminPanelToggle) {
+    const target = adminPanelToggle.dataset.adminPanelToggle;
+    $$("[data-admin-panel]").forEach((panel) => {
+      panel.hidden = panel.dataset.adminPanel !== target || !panel.hidden;
+    });
+    $$("[data-admin-panel-toggle]").forEach((button) => {
+      button.classList.toggle("active", button === adminPanelToggle && !$(`[data-admin-panel="${target}"]`)?.hidden);
+    });
+    return;
   }
   const noticeApply = event.target.closest("[data-notice-apply]");
   if (noticeApply) {
@@ -290,6 +296,14 @@ document.addEventListener("click", async (event) => {
   if (noticeImage) {
     const form = noticeImage.closest(".admin-notice-form");
     $("[data-notice-file]", form)?.click();
+  }
+  const noticeDateButton = event.target.closest("[data-notice-date-today], [data-notice-date-yesterday], [data-notice-date-now]");
+  if (noticeDateButton) {
+    const form = noticeDateButton.closest(".admin-notice-form");
+    const date = new Date();
+    if (noticeDateButton.matches("[data-notice-date-yesterday]")) date.setDate(date.getDate() - 1);
+    setNoticeDate(form, date, noticeDateButton.matches("[data-notice-date-now]"));
+    return;
   }
   const tradeCommand = event.target.closest("[data-trade-command]");
   if (tradeCommand) {
@@ -344,6 +358,31 @@ function syncNoticeEditor(form) {
   input.value = editor.innerHTML.trim();
 }
 
+function noticeDateParts(date = new Date()) {
+  const pad = (value) => String(value).padStart(2, "0");
+  return {
+    date: `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`,
+    time: `${pad(date.getHours())}:${pad(date.getMinutes())}`
+  };
+}
+
+function syncNoticeDate(form) {
+  const input = form?.elements.createdAt;
+  const dateInput = $("[data-notice-date-input]", form);
+  const timeInput = $("[data-notice-time-input]", form);
+  if (!input || !dateInput?.value) return;
+  input.value = `${dateInput.value}T${timeInput?.value || "09:00"}`;
+}
+
+function setNoticeDate(form, date, withTime = false) {
+  const parts = noticeDateParts(date);
+  const dateInput = $("[data-notice-date-input]", form);
+  const timeInput = $("[data-notice-time-input]", form);
+  if (dateInput) dateInput.value = parts.date;
+  if (withTime && timeInput) timeInput.value = parts.time;
+  syncNoticeDate(form);
+}
+
 function syncTradeEditor(form) {
   const editor = $("[data-trade-editor]", form);
   if (!editor) return;
@@ -352,6 +391,11 @@ function syncTradeEditor(form) {
 }
 
 document.addEventListener("change", async (event) => {
+  const noticeDateInput = event.target.closest("[data-notice-date-input], [data-notice-time-input]");
+  if (noticeDateInput) {
+    syncNoticeDate(noticeDateInput.closest(".admin-notice-form"));
+    return;
+  }
   const gameSelect = event.target.closest(".trade-compose select[name='gameSlug']");
   if (gameSelect) {
     const base = document.body.dataset.page === "trade" && location.pathname === "/buy" ? "/buy" : "/sell";
@@ -886,7 +930,9 @@ $$("form[data-form]").forEach((form) => {
         message.textContent = "저장되었습니다.";
       } else if (type === "notice") {
         syncNoticeEditor(form);
+        syncNoticeDate(form);
         data.body = form.elements.body?.value || "";
+        data.createdAt = form.elements.createdAt?.value || "";
         await post("/api/admin/notice", data);
         message.textContent = "공지사항이 추가되었습니다.";
         setTimeout(() => location.reload(), 450);

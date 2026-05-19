@@ -1068,6 +1068,77 @@ function pointRequestStatusLabel(status = "") {
   return "진행중";
 }
 
+function pointRequestDurationText(request = {}) {
+  const start = new Date(request.createdAt || now()).getTime();
+  const status = String(request.status || "");
+  const isMemberCanceled = status === "회원취소";
+  const isAdminCanceled = ["rejected", "거절", "취소", "취소완료"].includes(status);
+  const finishedAt = request.memberCanceledAt || request.handledAt || request.rolledBackAt || request.deletedAt || "";
+  const end = finishedAt ? new Date(finishedAt).getTime() : Date.now();
+  const diffMinutes = Math.max(0, Math.floor((end - start) / 60000));
+  const hours = Math.floor(diffMinutes / 60);
+  const minutes = diffMinutes % 60;
+  const duration = hours > 0 ? `${hours}시간${minutes ? ` ${minutes}분` : ""}` : `${diffMinutes}분`;
+  if (isMemberCanceled) return `${duration}뒤 회원취소`;
+  if (isAdminCanceled) return `${duration}뒤 관리자취소`;
+  return finishedAt ? `${duration} 소요` : `${duration}째 대기중`;
+}
+
+function pointRequestTimeCell(request = {}) {
+  return `<div class="point-time"><b>${esc(noticeDate(request.createdAt, true))}</b><small>${esc(pointRequestDurationText(request))}</small></div>`;
+}
+
+function pointRequestAdminStatusText(status = "") {
+  if (status === "회원취소") return "회원취소";
+  if (["rejected", "거절", "취소", "취소완료"].includes(status)) return "관리자취소";
+  return status;
+}
+
+function pageSize(value) {
+  return String(value) === "100" ? 100 : 10;
+}
+
+function pageNumber(value) {
+  const page = Math.floor(Number(value || 1));
+  return Number.isFinite(page) && page > 0 ? page : 1;
+}
+
+function pagedItems(items = [], requestedPage = 1, requestedSize = 10) {
+  const size = pageSize(requestedSize);
+  const total = items.length;
+  const totalPages = Math.max(1, Math.ceil(total / size));
+  const page = Math.min(pageNumber(requestedPage), totalPages);
+  const start = (page - 1) * size;
+  return { items: items.slice(start, start + size), page, size, total, totalPages };
+}
+
+function adminPageHref(params, updates = {}, anchor = "") {
+  const next = { ...params, ...updates };
+  const query = new URLSearchParams({
+    userPage: String(next.userPage || 1),
+    userSize: String(pageSize(next.userSize)),
+    pointPage: String(next.pointPage || 1),
+    pointSize: String(pageSize(next.pointSize))
+  });
+  return `/admin?${query.toString()}${anchor ? `#${anchor}` : ""}`;
+}
+
+function adminPager(paged, params, pageKey, sizeKey, anchor = "") {
+  const prev = paged.page > 1
+    ? `<a href="${adminPageHref(params, { [pageKey]: paged.page - 1 }, anchor)}">이전</a>`
+    : `<span>이전</span>`;
+  const next = paged.page < paged.totalPages
+    ? `<a href="${adminPageHref(params, { [pageKey]: paged.page + 1 }, anchor)}">다음</a>`
+    : `<span>다음</span>`;
+  return `<nav class="admin-pager">
+    <div>${prev}<b>${paged.page} / ${paged.totalPages}</b>${next}<small>총 ${paged.total.toLocaleString()}개</small></div>
+    <div class="admin-page-size">
+      <a class="${paged.size === 10 ? "active" : ""}" href="${adminPageHref(params, { [pageKey]: 1, [sizeKey]: 10 }, anchor)}">10개</a>
+      <a class="${paged.size === 100 ? "active" : ""}" href="${adminPageHref(params, { [pageKey]: 1, [sizeKey]: 100 }, anchor)}">100개</a>
+    </div>
+  </nav>`;
+}
+
 function pointLedgerLabel(row) {
   if (row.reason === "trade_escrow_hold") return "거래 예치";
   if (row.reason === "trade_escrow_refund") return "거래 예치 환불";
@@ -1766,12 +1837,22 @@ function myPage(user, db) {
   </main>`, "mypage");
 }
 
-function adminPage(user, db) {
+function adminPage(user, db, paging = {}) {
   const editCell = (name, value, type = "text") => `<div class="admin-edit-field" data-admin-field="${name}"><span>${esc(value || "-")}</span><input name="${name}" type="${type}" value="${esc(value || "")}" hidden><button type="button" data-admin-edit="${name}">수정</button></div>`;
   const passwordCell = () => `<div class="admin-edit-field password" data-admin-field="password"><span>변경 전용</span><input name="password" type="password" value="" placeholder="새 비밀번호" hidden><button type="button" data-admin-edit="password">수정</button></div>`;
   const selectCell = (name, value, options) => `<div class="admin-edit-field" data-admin-field="${name}"><span>${esc(value || "-")}</span><select name="${name}" hidden>${options.map((option) => `<option value="${esc(option)}" ${option === value ? "selected" : ""}>${esc(option)}</option>`).join("")}</select><button type="button" data-admin-edit="${name}">수정</button></div>`;
   const roleOptions = user.role === "OWNER" ? ROLES : ROLES.filter((role) => role !== "OWNER");
-  const users = db.users.map((u) => `<tr data-admin-user-row="${esc(u.id)}">
+  const pageParams = {
+    userPage: pageNumber(paging.userPage),
+    userSize: pageSize(paging.userSize),
+    pointPage: pageNumber(paging.pointPage),
+    pointSize: pageSize(paging.pointSize)
+  };
+  const usersPaged = pagedItems(db.users || [], pageParams.userPage, pageParams.userSize);
+  pageParams.userPage = usersPaged.page;
+  const pointRequestsPaged = pagedItems((db.pointRequests || []).slice().reverse(), pageParams.pointPage, pageParams.pointSize);
+  pageParams.pointPage = pointRequestsPaged.page;
+  const users = usersPaged.items.map((u) => `<tr data-admin-user-row="${esc(u.id)}">
     <td>${editCell("username", u.username)}</td>
     <td>${passwordCell()}</td>
     <td>${editCell("nickname", u.nickname)}</td>
@@ -1783,7 +1864,7 @@ function adminPage(user, db) {
     <td>${editCell("points", Number(u.points || 0), "number")}</td>
     <td><button type="button" class="admin-row-save" data-admin-user-save="${esc(u.id)}">저장</button></td>
   </tr>`).join("");
-  const reqs = db.pointRequests.slice().reverse().map((r) => {
+  const reqs = pointRequestsPaged.items.map((r) => {
     const member = db.users.find((u) => u.id === r.userId);
     const status = String(r.status || "대기");
     const isWithdraw = r.type === "withdraw";
@@ -1792,34 +1873,56 @@ function adminPage(user, db) {
       : `<span class="point-account empty">-</span>`;
     const isPending = status === "대기";
     const isApproved = ["approved", "승인", "완료", "처리완료"].includes(status);
+    const displayStatus = pointRequestAdminStatusText(status);
+    const statusClass = isPending ? "pending" : isApproved ? "done" : ["거절", "취소", "취소완료", "삭제", "회원취소"].includes(status) ? "cancel" : "neutral";
+    const statusCell = `<span class="point-status ${statusClass}">${esc(displayStatus)}</span>`;
     const actions = isPending
       ? `<button data-point="${r.id}" data-decision="approved">완료처리</button><button data-point="${r.id}" data-decision="rejected">취소</button><button data-point="${r.id}" data-decision="deleted">삭제</button>`
       : isApproved
         ? `<button data-point="${r.id}" data-decision="rollback">롤백</button><button data-point="${r.id}" data-decision="deleted">삭제</button>`
         : `<button data-point="${r.id}" data-decision="deleted">삭제</button>`;
-    return `<tr class="point-row ${isWithdraw ? "withdraw" : "charge"}"><td><span class="point-type ${isWithdraw ? "withdraw" : "charge"}">${isWithdraw ? "출금" : "충전"}</span></td><td>${esc(member?.nickname || r.nickname || "-")}</td><td>${esc(r.name || member?.name || "-")}</td><td>${Number(r.amount).toLocaleString()}원</td><td>${withdrawAccount}</td><td>${esc(status)}</td><td>${actions}</td></tr>`;
+    return `<tr class="point-row ${isWithdraw ? "withdraw" : "charge"} ${isPending ? "pending" : ""}"><td><span class="point-type ${isWithdraw ? "withdraw" : "charge"}">${isWithdraw ? "출금" : "충전"}</span></td><td>${esc(member?.nickname || r.nickname || "-")}</td><td>${esc(r.name || member?.name || "-")}</td><td>${Number(r.amount).toLocaleString()}원</td><td>${withdrawAccount}</td><td>${pointRequestTimeCell(r)}</td><td>${statusCell}</td><td>${actions}</td></tr>`;
   }).join("");
+  const usersPager = adminPager(usersPaged, pageParams, "userPage", "userSize");
+  const pointPager = adminPager(pointRequestsPaged, pageParams, "pointPage", "pointSize", "pointRequests");
   const latestNotices = noticePosts(db).slice(0, 6).map((post) => `<li><a href="/notices/${encodeURIComponent(post.id)}">${post.pinned ? "[상단고정] " : ""}${esc(post.title)}</a><span>${noticeDate(post.createdAt)}</span></li>`).join("");
   const noticeInputDate = new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+  const noticeInputDay = noticeInputDate.slice(0, 10);
+  const noticeInputTime = noticeInputDate.slice(11, 16);
   return layout("관리자", user, `<main class="admin-page">
     <h1>운영 관리자</h1>
+    <nav class="admin-tools">
+      <button type="button" data-admin-panel-toggle="account">계좌번호등록</button>
+      <button type="button" data-admin-panel-toggle="staff">운영진계정생성</button>
+      <button type="button" data-admin-panel-toggle="notice">공지사항관리</button>
+    </nav>
     <section class="admin-grid">
-      <form class="panel account-admin-form" data-form="site"><h2>계좌번호 등록</h2>
+      <form class="panel account-admin-form admin-collapsible-panel" data-admin-panel="account" data-form="site" hidden><h2>계좌번호 등록</h2>
         <input name="bank" value="${db.site.chargeAccount.bank}" placeholder="은행">
         <input name="holder" value="${db.site.chargeAccount.holder}" placeholder="예금주">
         <input name="number" value="${db.site.chargeAccount.number}" placeholder="계좌번호">
         <button>저장</button><p class="form-message"></p>
       </form>
-      <form class="panel" data-form="staff"><h2>운영진 계정 생성</h2>
+      <form class="panel admin-collapsible-panel" data-admin-panel="staff" data-form="staff" hidden><h2>운영진 계정 생성</h2>
         <input name="username" placeholder="아이디"><input name="password" type="password" placeholder="비밀번호"><input name="nickname" placeholder="닉네임">
         <select name="role"><option>STAFF</option></select><button>생성</button><p class="form-message"></p>
       </form>
     </section>
-    <section class="panel admin-notice-panel">
-      <div class="admin-notice-head"><h2>공지사항 관리</h2><button type="button" data-toggle-notice-form>공지사항 추가</button></div>
-      <form class="admin-notice-form" data-form="notice" hidden>
+    <section class="panel admin-notice-panel admin-collapsible-panel" data-admin-panel="notice" hidden>
+      <div class="admin-notice-head"><h2>공지사항 관리</h2></div>
+      <form class="admin-notice-form" data-form="notice">
         <label class="admin-check"><input type="checkbox" name="pinned"> 상단고정</label>
-        <label class="admin-notice-date">공지 날짜<input type="datetime-local" name="createdAt" value="${noticeInputDate}"></label>
+        <div class="admin-notice-date">
+          <span>공지 날짜</span>
+          <input type="hidden" name="createdAt" value="${noticeInputDate}">
+          <div class="admin-date-controls">
+            <input type="date" value="${noticeInputDay}" data-notice-date-input>
+            <input type="time" value="${noticeInputTime}" data-notice-time-input>
+            <button type="button" data-notice-date-today>오늘</button>
+            <button type="button" data-notice-date-yesterday>어제</button>
+            <button type="button" data-notice-date-now>현재시간</button>
+          </div>
+        </div>
         <input name="title" placeholder="제목" required>
         <input type="hidden" name="body" required>
         <div class="notice-editor-toolbar">
@@ -1835,8 +1938,8 @@ function adminPage(user, db) {
       </form>
       <ul class="admin-notice-list">${latestNotices}</ul>
     </section>
-    <section class="panel table-panel"><h2>회원 개인정보/등급 관리</h2><table><thead><tr><th>ID</th><th>비밀번호</th><th>닉네임</th><th>전화</th><th>이름</th><th>권한</th><th>표시등급</th><th>내부등급</th><th>마일리지</th><th></th></tr></thead><tbody>${users}</tbody></table></section>
-    <span id="pointRequests" class="admin-scroll-anchor"></span><section class="panel table-panel point-request-panel"><div class="panel-head"><h2>충전/출금 신청</h2><a href="/admin?refresh=${Date.now()}#pointRequests" class="admin-refresh-button">새로고침</a></div><table><thead><tr><th>구분</th><th>닉네임</th><th>이름</th><th>금액</th><th>출금계좌</th><th>상태</th><th></th></tr></thead><tbody>${reqs || "<tr><td colspan='7'>신청 내역이 없습니다.</td></tr>"}</tbody></table></section>
+    <section class="panel table-panel"><h2>회원 개인정보/등급 관리</h2><table><thead><tr><th>ID</th><th>비밀번호</th><th>닉네임</th><th>전화</th><th>이름</th><th>권한</th><th>표시등급</th><th>내부등급</th><th>마일리지</th><th></th></tr></thead><tbody>${users || "<tr><td colspan='10'>회원 내역이 없습니다.</td></tr>"}</tbody></table>${usersPager}</section>
+    <span id="pointRequests" class="admin-scroll-anchor"></span><section class="panel table-panel point-request-panel"><div class="panel-head"><h2>충전/출금 신청</h2><a href="${adminPageHref(pageParams, {}, "pointRequests")}" class="admin-refresh-button">새로고침</a></div><table><thead><tr><th>구분</th><th>닉네임</th><th>이름</th><th>금액</th><th>출금계좌</th><th>신청/처리</th><th>상태</th><th></th></tr></thead><tbody>${reqs || "<tr><td colspan='8'>신청 내역이 없습니다.</td></tr>"}</tbody></table>${pointPager}</section>
   </main>`, "admin");
 }
 
@@ -2575,7 +2678,12 @@ async function router(req, res) {
   if (url.pathname === "/charge") return protect(user, "member") ? send(res, 200, pointPage(user, db, "charge")) : redirect(res, "/login");
   if (url.pathname === "/withdraw") return protect(user, "member") ? send(res, 200, pointPage(user, db, "withdraw")) : redirect(res, "/login");
   if (url.pathname === "/mypage") return protect(user, "member") ? send(res, 200, myPage(user, db)) : redirect(res, "/login");
-  if (url.pathname === "/admin") return protect(user, "admin") ? send(res, 200, adminPage(user, db)) : redirect(res, "/login");
+  if (url.pathname === "/admin") return protect(user, "admin") ? send(res, 200, adminPage(user, db, {
+    userPage: url.searchParams.get("userPage"),
+    userSize: url.searchParams.get("userSize"),
+    pointPage: url.searchParams.get("pointPage"),
+    pointSize: url.searchParams.get("pointSize")
+  })) : redirect(res, "/login");
   if (url.pathname === "/staff") return protect(user, "staff") ? send(res, 200, staffPage(user)) : redirect(res, "/login");
   if (url.pathname === "/terms") return send(res, 200, legalPage(user, "service"));
   if (url.pathname === "/trade-terms") return send(res, 200, legalPage(user, "trade"));
