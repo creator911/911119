@@ -6527,6 +6527,121 @@ input:focus-visible {
   border-radius: 999px;
 }
 
+.charge-result-check {
+  width: 56px;
+  height: 56px;
+  display: grid;
+  place-items: center;
+  margin: 0 auto 16px;
+  border-radius: 50%;
+  background: #edf4ff;
+  color: #075bdc;
+  font-size: 30px;
+  font-weight: 950;
+  animation: chargeCheckPop .9s ease-in-out infinite alternate;
+}
+
+@keyframes chargeCheckPop {
+  from {
+    transform: scale(.94);
+    box-shadow: 0 0 0 0 rgba(7, 91, 220, .16);
+  }
+  to {
+    transform: scale(1.04);
+    box-shadow: 0 0 0 9px rgba(7, 91, 220, 0);
+  }
+}
+
+.charge-result-title {
+  margin: 0 0 6px;
+  text-align: center;
+  color: #111827;
+  font-size: 20px;
+  font-weight: 950;
+}
+
+.charge-result-sub {
+  margin: 0 0 20px;
+  text-align: center;
+  color: #94a3b8;
+  font-size: 14px;
+  font-weight: 800;
+}
+
+.charge-result-list {
+  display: grid;
+  grid-template-columns: 120px 1fr;
+  gap: 14px 16px;
+  margin: 0 -24px 20px;
+  padding: 20px 24px;
+  border-top: 1px solid #edf2f8;
+  border-bottom: 1px solid #edf2f8;
+}
+
+.charge-result-list dt,
+.charge-result-list dd {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 850;
+}
+
+.charge-result-list dt {
+  color: #7b8798;
+}
+
+.charge-result-list dd {
+  color: #111827;
+  text-align: right;
+  word-break: break-all;
+}
+
+.charge-result-list dd.amount {
+  color: #075bdc;
+  font-weight: 950;
+}
+
+.charge-result-caution {
+  margin: 0 0 18px;
+  padding: 14px;
+  border-radius: 10px;
+  background: #f5f8ff;
+  color: #111827;
+  font-size: 14px;
+  font-weight: 800;
+  line-height: 1.55;
+  word-break: keep-all;
+}
+
+.charge-result-caution strong {
+  display: inline-block;
+  color: #ef1717;
+  font-weight: 950;
+  animation: cautionPulse 1.35s ease-in-out infinite;
+}
+
+.charge-result-caution b {
+  color: #111827;
+  font-weight: 950;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.charge-result-caution em {
+  color: #ef1717;
+  font-style: normal;
+  font-weight: 950;
+}
+
+.charge-result-ok {
+  width: 100%;
+  min-height: 50px;
+  border-radius: 10px;
+  background: #075bdc;
+  color: #fff;
+  font-size: 16px;
+  font-weight: 950;
+}
+
 @media (max-width: 900px) {
   .mileage-page {
     grid-template-columns: 1fr;

@@ -569,6 +569,7 @@ let pendingWithdrawForm = null;
 let pendingWithdrawAccount = null;
 let pendingChargeForm = null;
 const withdrawModalTemplate = $(".withdraw-confirm-card")?.innerHTML || "";
+const chargeModalTemplate = $(".charge-confirm-card")?.innerHTML || "";
 
 function closeChargeModal() {
   const modal = $("[data-charge-modal]");
@@ -580,22 +581,43 @@ function closeChargeModal() {
 function openChargeModal(form) {
   const modal = $("[data-charge-modal]");
   if (!modal) return false;
+  const card = $(".charge-confirm-card", modal);
+  if (card && chargeModalTemplate && !card.querySelector("[data-charge-confirm]")) card.innerHTML = chargeModalTemplate;
   pendingChargeForm = form;
   modal.hidden = false;
   modal.querySelector("[data-charge-confirm]")?.focus();
   return true;
 }
 
+function showChargeResult(result, amount) {
+  const modal = $("[data-charge-modal]");
+  const card = $(".charge-confirm-card", modal);
+  if (!modal || !card) return;
+  const account = result.account || {};
+  card.innerHTML = `<div class="charge-result-check" aria-hidden="true">✓</div>
+    <h2 class="charge-result-title">입금신청결과안내</h2>
+    <p class="charge-result-sub">입금신청이 정상 처리되었습니다</p>
+    <dl class="charge-result-list">
+      <dt>입금은행</dt><dd>${escapeHtml(account.bank || "-")}</dd>
+      <dt>계좌번호</dt><dd>${escapeHtml(account.number || "-")}</dd>
+      <dt>이름</dt><dd>${escapeHtml(account.holder || "-")}</dd>
+      <dt>금액</dt><dd class="amount">${formatWon(amount)}</dd>
+      <dt>유효기간</dt><dd>${escapeHtml(result.deadline || "-")}</dd>
+    </dl>
+    <p class="charge-result-caution"><strong>주의!</strong> <b>카카오뱅크</b> · <b>카카오페이</b> · <b>토스뱅크</b>등의 간편결제 서비스에서는 가상계좌로의 <em>입금 확인이 되지 않습니다.</em></p>
+    <button type="button" class="charge-result-ok" data-charge-result-ok>확인</button>`;
+  modal.hidden = false;
+  card.querySelector("[data-charge-result-ok]")?.focus();
+}
+
 async function submitChargeRequest() {
   const form = pendingChargeForm;
   if (!form) return;
   const data = formData(form);
-  await post("/api/point-request", { ...data, type: "charge" });
-  closeChargeModal();
+  const result = await post("/api/point-request", { ...data, type: "charge" });
   form.reset();
   updateMileageForm(form);
-  sessionStorage.setItem("focusChargeAccount", "1");
-  location.href = "/charge";
+  showChargeResult(result, data.amount);
 }
 
 function closeWithdrawModal() {
@@ -698,6 +720,11 @@ document.addEventListener("click", (event) => {
       if (message) message.textContent = error.message;
       closeChargeModal();
     });
+    return;
+  }
+  if (event.target.closest("[data-charge-result-ok]")) {
+    sessionStorage.setItem("focusChargeAccount", "1");
+    location.href = "/charge";
     return;
   }
   if (event.target.closest("[data-withdraw-cancel]")) {

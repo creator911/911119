@@ -2052,8 +2052,9 @@ async function api(req, res, db, user, pathname) {
           row.autoCanceledByNextCharge = true;
         });
       }
-      db.pointRequests.push({ id: id("point"), userId: user.id, type: data.type, amount, nickname: user.nickname || "", name: user.name || "", withdrawAccount, status: "대기", pointsReserved: data.type === "withdraw", pointsReleased: false, createdAt: now(), handledBy: null, handledAt: null });
-      await writeDb(db); return send(res, 200, { ok: true, account: db.site.chargeAccount });
+      const pointRequest = { id: id("point"), userId: user.id, type: data.type, amount, nickname: user.nickname || "", name: user.name || "", withdrawAccount, status: "대기", pointsReserved: data.type === "withdraw", pointsReleased: false, createdAt: now(), handledBy: null, handledAt: null };
+      db.pointRequests.push(pointRequest);
+      await writeDb(db); return send(res, 200, { ok: true, account: db.site.chargeAccount, amount, deadline: data.type === "charge" ? pointDeadlineText(pointRequest.createdAt, 60) : "" });
     }
     if (pathname === "/api/point-request/cancel" && req.method === "POST") {
       if (!protect(user, "member")) return send(res, 401, { error: "로그인이 필요합니다." });
