@@ -1087,15 +1087,19 @@ async function loadDirectRooms() {
   if (!res.ok) return;
   const { rooms } = await res.json();
   setDirectUnread((rooms || []).reduce((sum, room) => sum + Number(room.unread || 0), 0));
-  directChatRooms.innerHTML = rooms.map((room) => `<button type="button" class="direct-room-row ${activeDirectRoom === room.id ? "active" : ""} ${Number(room.unread || 0) > 0 ? "has-unread" : ""} ${room.systemOnly && Number(room.unread || 0) > 0 ? "system-unread" : ""}" data-direct-room="${escapeAttr(room.id)}">
+  directChatRooms.innerHTML = rooms.map((room) => {
+    const unread = Number(room.unread || 0);
+    const systemUnread = room.systemOnly && unread > 0;
+    return `<button type="button" class="direct-room-row ${activeDirectRoom === room.id ? "active" : ""} ${systemUnread ? "has-unread system-unread" : ""}" data-direct-room="${escapeAttr(room.id)}">
     <img src="${escapeAttr(room.systemOnly ? (room.peerGradeAsset || "/assets/tiers/master.png") : room.peerGradeAsset || "")}" alt="">
     <span>
       <b>${escapeHtml(room.peerNickname || "회원")}</b>
       <small>${escapeHtml(room.tradeTitle || "거래글")}</small>
       <em>${escapeHtml(room.lastMessage || "아직 대화가 없습니다.")}</em>
     </span>
-    ${room.unread ? `<i>${Number(room.unread)}</i>` : ""}
-  </button>`).join("") || directChatEmpty("현재 채팅이 없습니다.");
+    ${unread ? `<i>${unread}</i>` : ""}
+  </button>`;
+  }).join("") || directChatEmpty("현재 채팅이 없습니다.");
 }
 
 async function loadDirectMessages() {

@@ -38,6 +38,7 @@ button { cursor: pointer; border: 0; }
   display: flex;
   align-items: center;
   min-width: 0;
+  margin-left: 30px;
 }
 .brand img {
   display: block;
@@ -1172,6 +1173,7 @@ td button { margin-right: 6px; min-height: 34px; }
     padding: 10px 14px;
     gap: 10px;
   }
+  .brand { margin-left: 0; }
   .brand img { width: 190px; }
   .search {
     order: 3;
@@ -1662,6 +1664,7 @@ input:focus-visible {
   }
   .brand {
     width: 190px;
+    margin-left: 0;
   }
   .account {
     justify-content: flex-start;
