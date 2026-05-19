@@ -1873,7 +1873,7 @@ input:focus-visible {
 .quick-actions a:hover {
   color: var(--blue);
   transform: translateY(-2px);
-  box-shadow: 0 8px 18px rgba(8,103,219,.12);
+  box-shadow: none;
 }
 .hot-section {
   background: #171a20;
@@ -2554,15 +2554,19 @@ input:focus-visible {
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 10px;
   padding: 0 18px 18px;
+  background: transparent;
+  box-shadow: none;
 }
 .quick-actions a {
   min-width: 0;
   min-height: 140px;
   grid-template-rows: 76px auto;
-  align-content: center;
-  padding: 12px 5px 10px;
+  align-content: start;
+  row-gap: 18px;
+  padding: 8px 5px 10px;
   border-radius: 8px;
   overflow: hidden;
+  box-shadow: none;
 }
 .quick-actions img {
   width: 82px;
@@ -2577,7 +2581,7 @@ input:focus-visible {
   font-weight: 900;
   line-height: 1.12;
   text-overflow: clip;
-  white-space: normal;
+  white-space: nowrap;
 }
 
 .games-page,
@@ -7393,9 +7397,6 @@ main,
 .home-login,
 .notice-card,
 .ad-placeholder,
-.dashboard .quick-grid,
-.member-summary,
-.quick-actions,
 .mypage-summary-card,
 .mypage-simple-panel,
 .mypage-simple-history,

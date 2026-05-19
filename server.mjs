@@ -606,8 +606,8 @@ function normalizePostStatusForType(status = "", type = "sell") {
   return status || (type === "sell" ? "판매중" : "구매중");
 }
 
-function tradeMileageTransfer(db, post, type) {
-  if (post.pointTransferred) return { ok: true };
+function tradeEscrowHold(db, post, type) {
+  if (post.escrowHeld) return { ok: true };
   const amount = Math.max(0, Math.floor(Number(post.price || 0)));
   if (!amount) return { ok: false, error: "거래 금액을 확인하세요." };
   const owner = db.users.find((item) => item.id === post.userId);
@@ -616,17 +616,52 @@ function tradeMileageTransfer(db, post, type) {
   const payer = type === "sell" ? counterparty : owner;
   const receiver = type === "sell" ? owner : counterparty;
   if (payer.id === receiver.id) return { ok: false, error: "거래 당사자 정보를 확인하세요." };
-  if (Number(payer.points || 0) < amount) return { ok: false, error: "구매자의 마일리지가 부족합니다." };
+  if (Number(payer.points || 0) < amount) return { ok: false, error: "거래 금액만큼의 마일리지가 부족합니다." };
   payer.points = Number(payer.points || 0) - amount;
+  post.escrowHeld = true;
+  post.escrowAmount = amount;
+  post.escrowPayerId = payer.id;
+  post.escrowReceiverId = receiver.id;
+  post.escrowHeldAt = now();
+  db.pointLedger.push({ id: id("ledger"), tradeId: post.id, tradeType: type, userId: payer.id, amount: -amount, reason: "trade_escrow_hold", counterpartyId: receiver.id, createdAt: now() });
+  return { ok: true };
+}
+
+function tradeMileageTransfer(db, post, type) {
+  if (post.pointTransferred) return { ok: true };
+  const amount = Math.max(0, Math.floor(Number(post.escrowAmount || post.price || 0)));
+  if (!amount) return { ok: false, error: "거래 금액을 확인하세요." };
+  const owner = db.users.find((item) => item.id === post.userId);
+  const counterparty = db.users.find((item) => item.id === post.counterpartyId);
+  if (!owner || !counterparty) return { ok: false, error: "거래 회원 정보를 찾을 수 없습니다." };
+  const payer = type === "sell" ? counterparty : owner;
+  const receiver = type === "sell" ? owner : counterparty;
+  if (payer.id === receiver.id) return { ok: false, error: "거래 당사자 정보를 확인하세요." };
+  if (!post.escrowHeld) {
+    if (Number(payer.points || 0) < amount) return { ok: false, error: "거래 금액만큼의 마일리지가 부족합니다." };
+    payer.points = Number(payer.points || 0) - amount;
+    db.pointLedger.push({ id: id("ledger"), tradeId: post.id, tradeType: type, userId: payer.id, amount: -amount, reason: "trade_payment", counterpartyId: receiver.id, createdAt: now() });
+  }
   receiver.points = Number(receiver.points || 0) + amount;
   post.pointTransferred = true;
   post.pointTransferredAt = now();
+  post.escrowReleased = true;
+  post.escrowReleasedAt = now();
   post.payerId = payer.id;
   post.receiverId = receiver.id;
-  db.pointLedger.push(
-    { id: id("ledger"), tradeId: post.id, tradeType: type, userId: payer.id, amount: -amount, reason: "trade_payment", counterpartyId: receiver.id, createdAt: now() },
-    { id: id("ledger"), tradeId: post.id, tradeType: type, userId: receiver.id, amount, reason: "trade_receive", counterpartyId: payer.id, createdAt: now() }
-  );
+  db.pointLedger.push({ id: id("ledger"), tradeId: post.id, tradeType: type, userId: receiver.id, amount, reason: "trade_receive", counterpartyId: payer.id, createdAt: now() });
+  return { ok: true };
+}
+
+function refundTradeEscrow(db, post, type) {
+  if (!post.escrowHeld || post.pointTransferred || post.escrowRefunded) return { ok: true };
+  const amount = Math.max(0, Math.floor(Number(post.escrowAmount || post.price || 0)));
+  const payer = db.users.find((item) => item.id === post.escrowPayerId || item.id === (type === "sell" ? post.counterpartyId : post.userId));
+  if (!payer || !amount) return { ok: false, error: "예치 마일리지 정보를 확인하세요." };
+  payer.points = Number(payer.points || 0) + amount;
+  post.escrowRefunded = true;
+  post.escrowRefundedAt = now();
+  db.pointLedger.push({ id: id("ledger"), tradeId: post.id, tradeType: type, userId: payer.id, amount, reason: "trade_escrow_refund", hiddenFromMember: true, createdAt: now() });
   return { ok: true };
 }
 
@@ -702,11 +737,8 @@ function normalizeInternalGrade(value = "") {
 function tradeStatusLabel(status = "", type = "sell") {
   const compact = String(status || "").replace(/\s/g, "");
   if (compact === "판매중" || compact === "구매중") return "";
-  if (compact === "구매진행중") return "구매 진행중";
-  if (compact === "판매진행중") return "판매 진행중";
-  if (compact === "거래완료") return type === "buy" ? "구매완료" : "판매완료";
-  if (compact === "구매완료") return "구매완료";
-  if (compact === "판매완료") return "판매완료";
+  if (compact === "구매진행중" || compact === "판매진행중" || compact === "거래진행중") return "거래 진행중";
+  if (compact === "거래완료" || compact === "구매완료" || compact === "판매완료") return "거래완료";
   return status;
 }
 
@@ -1026,7 +1058,7 @@ function renderTradeCard(post, db, owner = false) {
     <p>${esc(post.gameName || post.game)} · ${esc(post.server || "서버전체")}</p>
     <strong>${won(post.price)}</strong>
     <small>${esc(member?.nickname || "회원")} · ${new Date(post.createdAt).toLocaleDateString("ko-KR")}</small>
-    ${owner ? `<label class="status-update">상태<select data-trade-status="${esc(post.id)}" data-trade-type="${post.type}">${statusOptions.map((item) => `<option ${item === status ? "selected" : ""}>${item}</option>`).join("")}</select></label>` : ""}
+    ${owner ? `<label class="status-update">상태<select data-trade-status="${esc(post.id)}" data-trade-type="${post.type}">${statusOptions.map((item) => `<option value="${esc(item)}" ${item === status ? "selected" : ""}>${esc(tradeStatusLabel(item, post.type) || item)}</option>`).join("")}</select></label>` : ""}
   </article>`;
 }
 
@@ -1037,6 +1069,8 @@ function pointRequestStatusLabel(status = "") {
 }
 
 function pointLedgerLabel(row) {
+  if (row.reason === "trade_escrow_hold") return "거래 예치";
+  if (row.reason === "trade_escrow_refund") return "거래 예치 환불";
   if (row.reason === "trade_payment") return "거래 결제";
   if (row.reason === "trade_receive") return "거래 대금";
   if (row.reason === "charge") return "마일리지 충전";
@@ -1184,13 +1218,16 @@ function tradeDetailPage(user, db, type, postId) {
   const statusKey = String(status || "").replace(/\s/g, "");
   const isOwner = user?.id === post.userId;
   const isCompleted = ["판매완료", "구매완료", "거래완료"].includes(statusKey);
-  const canDeleteTrade = canAdmin(user) || (isOwner && !isCompleted);
-  const canStart = user && !isOwner && ((type === "sell" && status === "판매중") || (type === "buy" && status === "구매중"));
   const isProgressing = type === "sell" ? statusKey === "판매진행중" : statusKey === "구매진행중";
+  const canDeleteTrade = canAdmin(user) || (isOwner && !isCompleted && !isProgressing);
+  const canStart = user && !isOwner && ((type === "sell" && status === "판매중") || (type === "buy" && status === "구매중"));
+  const tradeAmount = Math.max(0, Math.floor(Number(post.price || 0)));
+  const escrowPayerForStart = type === "sell" ? user : member;
+  const hasEscrowFunds = !canStart || Number(escrowPayerForStart?.points || 0) >= tradeAmount;
   const canComplete = user && post.counterpartyId === user.id && isProgressing;
   const canOwnerChat = user && isOwner && isProgressing && post.counterpartyId;
   const actionLabel = type === "sell" ? "구매요청하기" : "판매요청하기";
-  const completeLabel = type === "sell" ? "판매완료" : "구매완료";
+  const completeLabel = "거래완료";
   const sideLabel = type === "sell" ? "팝니다" : "삽니다";
   const amountLabel = type === "sell" ? "판매금액" : "구매금액";
   const quantityLabel = type === "sell" ? "판매수량" : "구매수량";
@@ -1247,7 +1284,8 @@ function tradeDetailPage(user, db, type, postId) {
         </dl>
         <div class="trade-detail-buttons">
           ${!user ? `<a class="trade-detail-chat" href="/login">채팅</a>` : (!isOwner || canOwnerChat) ? `<button type="button" class="trade-detail-chat" data-direct-chat-start="${type}" data-trade-id="${esc(post.id)}">채팅</button>` : `<button type="button" class="trade-detail-chat" disabled>채팅</button>`}
-          ${canStart ? `<button type="button" class="trade-detail-request" data-trade-action="${type}" data-trade-id="${esc(post.id)}">${actionLabel}</button>` : ""}
+          ${canStart && hasEscrowFunds ? `<button type="button" class="trade-detail-request" data-trade-action="${type}" data-trade-id="${esc(post.id)}">${actionLabel}</button>` : ""}
+          ${canStart && !hasEscrowFunds ? `<button type="button" class="trade-detail-request" disabled>마일리지 부족</button>` : ""}
           ${canComplete ? `<button type="button" class="trade-detail-request" data-trade-complete="${type}" data-trade-id="${esc(post.id)}">${completeLabel}</button>` : ""}
           ${canDeleteTrade ? `<button type="button" class="trade-detail-delete" data-trade-delete="${type}" data-trade-id="${esc(post.id)}">삭제</button>` : ""}
           ${!user && !displayStatus ? `<a class="trade-detail-request" href="/login">${actionLabel}</a>` : ""}
@@ -1263,12 +1301,14 @@ function tradeDetailPage(user, db, type, postId) {
 }
 
 function layout(title, user, content, page = "home") {
+  const pageTitle = page === "home" && title === "홈" ? "아이템존 - 신뢰의 No.1" : `${title} - 아이템존`;
   return `<!doctype html>
 <html lang="ko">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>${title} - 아이템존</title>
+  <title>${pageTitle}</title>
+  <link rel="icon" type="image/png" href="/favicon.png">
   <link rel="stylesheet" href="/styles.css">
 </head>
 <body data-page="${page}" data-user="${user ? user.id : ""}" data-role="${user ? user.role : ""}">
@@ -1374,7 +1414,7 @@ function homePage(user, db) {
         <nav class="quick-actions">
           <a href="/charge"><img src="/assets/quick/point-charge.png" alt=""><span>충전</span></a>
           <a href="/withdraw"><img src="/assets/quick/point-withdraw.png" alt=""><span>출금</span></a>
-          <a href="/support" data-open-chat><img src="/assets/quick/support-agent.png" alt=""><span>상담사<br>연결</span></a>
+          <a href="/support" data-open-chat><img src="/assets/quick/support-agent.png" alt=""><span>1:1 톡</span></a>
         </nav>` : `<form class="home-login" data-form="login">
           <h2>안전한 게임 거래의 시작</h2>
           <label>아이디<input name="username" placeholder="아이디를 입력하세요" required></label>
@@ -1552,12 +1592,12 @@ function legacySimpleRenderTradeCard(post, db, owner = false) {
   const sideLabel = post.type === "sell" ? "판매" : "구매";
   const statusOptions = post.type === "sell" ? ["판매중", "판매 진행중", "판매완료", "숨김"] : ["구매중", "구매 진행중", "구매완료", "숨김"];
   return `<article class="trade-card">
-    <div class="trade-card__meta"><span class="${post.type}">${sideLabel}</span><b>${esc(tradeKindLabel(post.tradeKind || post.category))}</b><b>${esc(post.unit || "일반")}</b><em>${esc(post.status || "-")}</em></div>
+    <div class="trade-card__meta"><span class="${post.type}">${sideLabel}</span><b>${esc(tradeKindLabel(post.tradeKind || post.category))}</b><b>${esc(post.unit || "일반")}</b>${tradeStatusLabel(post.status, post.type) ? `<em>${esc(tradeStatusLabel(post.status, post.type))}</em>` : ""}</div>
     <h3>${esc(post.title)}</h3>
     <p>${esc(post.gameName || post.game)} · ${esc(post.server || "서버전체")}</p>
     <strong>${won(post.price)}</strong>
     <small>${esc(member?.nickname || "회원")} · ${new Date(post.createdAt).toLocaleDateString("ko-KR")}</small>
-    ${owner ? `<label class="status-update">상태<select data-trade-status="${esc(post.id)}" data-trade-type="${post.type}">${statusOptions.map((status) => `<option ${status === post.status ? "selected" : ""}>${status}</option>`).join("")}</select></label>` : ""}
+    ${owner ? `<label class="status-update">상태<select data-trade-status="${esc(post.id)}" data-trade-type="${post.type}">${statusOptions.map((status) => `<option value="${esc(status)}" ${status === post.status ? "selected" : ""}>${esc(tradeStatusLabel(status, post.type) || status)}</option>`).join("")}</select></label>` : ""}
   </article>`;
 }
 
@@ -1982,8 +2022,14 @@ async function api(req, res, db, user, pathname) {
       const nextStatus = type === "sell" ? "판매 진행중" : "구매 진행중";
       const status = post.status || openStatus;
       if (status !== openStatus) return send(res, 400, { error: "이미 진행 중이거나 완료된 거래입니다." });
-      post.status = nextStatus;
+      const previousCounterpartyId = post.counterpartyId;
       post.counterpartyId = user.id;
+      const escrow = tradeEscrowHold(db, post, type);
+      if (!escrow.ok) {
+        post.counterpartyId = previousCounterpartyId;
+        return send(res, 400, { error: escrow.error });
+      }
+      post.status = nextStatus;
       post.updatedAt = now();
       notifyTradeRequested(db, post, type, user);
       addTradeRequestGreeting(db, post, type, user);
@@ -2022,8 +2068,11 @@ async function api(req, res, db, user, pathname) {
       const targetStatus = String(target.status || "").replace(/\s/g, "");
       if (!canAdmin(user)) {
         if (target.userId !== user.id) return send(res, 403, { error: "본인이 등록한 글만 삭제할 수 있습니다." });
+        if (targetStatus.includes("진행중")) return send(res, 400, { error: "거래 진행중인 글은 삭제할 수 없습니다." });
         if (["판매완료", "구매완료", "거래완료"].includes(targetStatus)) return send(res, 400, { error: "거래완료된 글은 관리자만 삭제할 수 있습니다." });
       }
+      const refund = refundTradeEscrow(db, target, type);
+      if (!refund.ok) return send(res, 400, { error: refund.error });
       const [removed] = collection.splice(index, 1);
       audit(db, user, "TRADE_DELETE", removed.id);
       await writeDb(db);
@@ -2036,6 +2085,12 @@ async function api(req, res, db, user, pathname) {
       const post = collection.find((item) => item.id === data.id);
       if (!post) return send(res, 404, { error: "거래글을 찾을 수 없습니다." });
       if (post.userId !== user.id && !canAdmin(user)) return send(res, 403, { error: "권한이 없습니다." });
+      const currentStatusKey = String(post.status || "").replace(/\s/g, "");
+      const nextStatusKey = String(data.status || "").replace(/\s/g, "");
+      if (!canAdmin(user)) {
+        if (currentStatusKey.includes("진행중") || currentStatusKey.includes("완료")) return send(res, 400, { error: "거래 진행중 또는 완료 상태는 직접 변경할 수 없습니다." });
+        if (nextStatusKey.includes("진행중") || nextStatusKey.includes("완료")) return send(res, 400, { error: "거래 요청과 완료 버튼으로만 상태를 변경할 수 있습니다." });
+      }
       const allowed = data.type === "sell" ? ["판매중", "판매 진행중", "판매진행중", "판매완료", "숨김"] : ["구매중", "구매 진행중", "구매진행중", "구매완료", "숨김"];
       if (!allowed.includes(data.status)) return send(res, 400, { error: "상태값을 확인하세요." });
       post.status = data.status;
