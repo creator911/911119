@@ -6687,6 +6687,7 @@ input:focus-visible {
   font-size: 15px;
   font-weight: 800;
   line-height: 1.5;
+  text-align: center;
   word-break: keep-all;
 }
 
@@ -6941,6 +6942,51 @@ input:focus-visible {
 .mileage-guide li {
   margin-bottom: 10px;
   line-height: 1.42;
+}
+
+.charge-page .mileage-form h2 {
+  display: none;
+}
+
+.charge-page .mileage-form h3 {
+  margin-top: 0;
+  margin-bottom: 14px;
+}
+
+.charge-page .mileage-request-panel {
+  padding-top: 26px;
+  padding-bottom: 10px;
+}
+
+.charge-page .mileage-form {
+  gap: 10px;
+}
+
+.charge-page .mileage-guide {
+  margin-top: 46px;
+}
+
+.charge-page .mileage-submit {
+  min-height: 52px;
+  margin-top: 40px;
+}
+
+.charge-page .mileage-summary {
+  margin-top: 10px;
+  margin-bottom: 4px;
+  padding-top: 14px;
+}
+
+@media (min-width: 821px) {
+  .charge-page .mileage-request-panel {
+    min-height: 525px;
+    max-height: 525px;
+    overflow: hidden;
+  }
+
+  .charge-page .mileage-info-panel {
+    min-height: 525px;
+  }
 }
 
 .chat-log .chat-image-link {
