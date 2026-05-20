@@ -17,11 +17,32 @@ const CHARGE_NUMBER = process.env.ITEMZONE_CHARGE_NUMBER || "계좌번호를 입
 const DATA_DIR = path.join(__dirname, "data");
 const DB_PATH = path.join(DATA_DIR, "db.json");
 const DB_BACKUP_KEEP = 30;
+const DATABASE_URL = process.env.ITEMZONE_DATABASE_URL || process.env.DATABASE_URL || "";
+const DATABASE_SSL = process.env.ITEMZONE_DATABASE_SSL === "true";
+const USE_POSTGRES = Boolean(DATABASE_URL);
+const PG_COLLECTIONS = [
+  "users",
+  "games",
+  "sellPosts",
+  "buyPosts",
+  "pointRequests",
+  "pointLedger",
+  "chatRooms",
+  "chatMessages",
+  "auditLogs",
+  "directChatRooms",
+  "directChatMessages",
+  "userNotifications"
+];
 const PUBLIC_SEED_PATH = path.join(DATA_DIR, "public-seed.json");
 const PUBLIC_DIR = path.join(__dirname, "public");
 const LEGAL_DIR = path.join(DATA_DIR, "legal");
 const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 let dbWriteQueue = Promise.resolve();
+let pgPoolPromise = null;
+let pgSchemaReady = false;
+let pgCache = null;
+let pgSnapshots = null;
 
 const DISPLAY_GRADES = ["브론즈", "실버", "골드", "플레티넘", "다이아", "마스터", "챌린저"];
 const MEMBER_GRADES = ["브론즈", "실버", "골드", "플레티넘", "다이아"];
@@ -163,7 +184,165 @@ async function verifyPassword(password, stored) {
   return crypto.timingSafeEqual(Buffer.from(await hashPassword(password, salt)), Buffer.from(stored));
 }
 
+async function pgPool() {
+  if (!pgPoolPromise) {
+    pgPoolPromise = import("pg").then(({ Pool }) => new Pool({
+      connectionString: DATABASE_URL,
+      ssl: DATABASE_SSL ? { rejectUnauthorized: false } : undefined
+    }));
+  }
+  return pgPoolPromise;
+}
+
+async function ensurePostgresSchema() {
+  if (pgSchemaReady) return;
+  const pool = await pgPool();
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS itemzone_meta (
+      key text PRIMARY KEY,
+      data jsonb NOT NULL,
+      updated_at timestamptz NOT NULL DEFAULT now()
+    );
+    CREATE TABLE IF NOT EXISTS itemzone_entities (
+      collection text NOT NULL,
+      id text NOT NULL,
+      sort_order integer NOT NULL DEFAULT 0,
+      data jsonb NOT NULL,
+      created_at timestamptz NOT NULL DEFAULT now(),
+      updated_at timestamptz NOT NULL DEFAULT now(),
+      PRIMARY KEY (collection, id)
+    );
+    CREATE INDEX IF NOT EXISTS idx_itemzone_entities_collection_sort
+      ON itemzone_entities (collection, sort_order);
+    CREATE INDEX IF NOT EXISTS idx_itemzone_entities_collection_created
+      ON itemzone_entities (collection, ((data->>'createdAt')) DESC);
+    CREATE INDEX IF NOT EXISTS idx_itemzone_entities_trade_game
+      ON itemzone_entities (collection, ((data->>'gameSlug')));
+  `);
+  pgSchemaReady = true;
+}
+
+function ensureEntityId(collection, item, index) {
+  if (item && typeof item === "object" && !item.id) item.id = id(collection.replace(/s$/, "") || "row");
+  return String(item?.id || `${collection}_${index}`);
+}
+
+function capturePgSnapshots(db) {
+  const collections = new Map();
+  for (const collection of PG_COLLECTIONS) {
+    const rows = Array.isArray(db[collection]) ? db[collection] : [];
+    const rowMap = new Map();
+    rows.forEach((row, index) => {
+      const rowId = ensureEntityId(collection, row, index);
+      rowMap.set(rowId, { json: JSON.stringify(row), sortOrder: index });
+    });
+    collections.set(collection, rowMap);
+  }
+  pgSnapshots = {
+    site: JSON.stringify(db.site || {}),
+    collections
+  };
+}
+
+async function writePostgresDb(db) {
+  await ensurePostgresSchema();
+  const pool = await pgPool();
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    const siteJson = JSON.stringify(db.site || {});
+    if (!pgSnapshots || pgSnapshots.site !== siteJson) {
+      await client.query(
+        `INSERT INTO itemzone_meta (key, data, updated_at)
+         VALUES ('site', $1::jsonb, now())
+         ON CONFLICT (key) DO UPDATE SET data = EXCLUDED.data, updated_at = now()`,
+        [siteJson]
+      );
+    }
+    for (const collection of PG_COLLECTIONS) {
+      const rows = Array.isArray(db[collection]) ? db[collection] : [];
+      const previous = pgSnapshots?.collections?.get(collection) || new Map();
+      const currentIds = new Set();
+      for (let index = 0; index < rows.length; index += 1) {
+        const row = rows[index];
+        const rowId = ensureEntityId(collection, row, index);
+        currentIds.add(rowId);
+        const rowJson = JSON.stringify(row);
+        const before = previous.get(rowId);
+        if (!before || before.json !== rowJson || before.sortOrder !== index) {
+          await client.query(
+            `INSERT INTO itemzone_entities (collection, id, sort_order, data, updated_at)
+             VALUES ($1, $2, $3, $4::jsonb, now())
+             ON CONFLICT (collection, id)
+             DO UPDATE SET sort_order = EXCLUDED.sort_order, data = EXCLUDED.data, updated_at = now()`,
+            [collection, rowId, index, rowJson]
+          );
+        }
+      }
+      const deleted = [...previous.keys()].filter((rowId) => !currentIds.has(rowId));
+      if (deleted.length) {
+        await client.query("DELETE FROM itemzone_entities WHERE collection = $1 AND id = ANY($2::text[])", [collection, deleted]);
+      }
+    }
+    await client.query("COMMIT");
+    pgCache = db;
+    capturePgSnapshots(db);
+  } catch (error) {
+    await client.query("ROLLBACK").catch(() => {});
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
+async function readPostgresDb() {
+  if (pgCache) {
+    const normalized = normalizeDb(pgCache);
+    if (normalized.changed) await writeDb(normalized.db);
+    pgCache = normalized.db;
+    return pgCache;
+  }
+  await ensurePostgresSchema();
+  const pool = await pgPool();
+  const client = await pool.connect();
+  try {
+    const meta = await client.query("SELECT data FROM itemzone_meta WHERE key = 'site'");
+    const count = await client.query("SELECT count(*)::int AS count FROM itemzone_entities");
+    if (!meta.rows.length && Number(count.rows[0]?.count || 0) === 0) {
+      let initialDb = null;
+      try {
+        initialDb = JSON.parse(await retryBusy(() => readFile(DB_PATH, "utf8")));
+      } catch (error) {
+        if (error?.code !== "ENOENT") throw error;
+        initialDb = await createSeedDb();
+      }
+      const normalized = normalizeDb(initialDb);
+      await writePostgresDb(normalized.db);
+      return normalized.db;
+    }
+    const db = { site: meta.rows[0]?.data || {} };
+    for (const collection of PG_COLLECTIONS) db[collection] = [];
+    const rows = await client.query("SELECT collection, data FROM itemzone_entities ORDER BY collection, sort_order, created_at");
+    for (const row of rows.rows) {
+      if (!PG_COLLECTIONS.includes(row.collection)) continue;
+      db[row.collection].push(row.data);
+    }
+    const normalized = normalizeDb(db);
+    if (normalized.changed) await writePostgresDb(normalized.db);
+    pgCache = normalized.db;
+    capturePgSnapshots(pgCache);
+    return pgCache;
+  } finally {
+    client.release();
+  }
+}
+
 async function readDb() {
+  if (USE_POSTGRES) return readPostgresDb();
+  return readJsonDb();
+}
+
+async function readJsonDb() {
   try {
     const db = JSON.parse(await retryBusy(() => readFile(DB_PATH, "utf8")));
     const normalized = normalizeDb(db);
@@ -378,15 +557,19 @@ async function pruneDbBackups() {
   } catch {}
 }
 
-async function writeDb(db) {
+async function writeJsonDb(db) {
   const payload = JSON.stringify(db, null, 2);
-  dbWriteQueue = dbWriteQueue.catch(() => {}).then(() => writeDbPayload(payload));
+  return writeDbPayload(payload);
+}
+
+async function writeDb(db) {
+  dbWriteQueue = dbWriteQueue
+    .catch(() => {})
+    .then(() => (USE_POSTGRES ? writePostgresDb(db) : writeJsonDb(db)));
   return dbWriteQueue;
 }
 
-async function seedDb() {
-  await mkdir(DATA_DIR, { recursive: true });
-  if (existsSync(DB_PATH)) return;
+async function createSeedDb() {
   const ownerId = id("user");
   const seed = readPublicSeed();
   const seededPosts = publicSeedPosts(seed, ownerId);
@@ -441,7 +624,14 @@ async function seedDb() {
     userNotifications: [],
     auditLogs: []
   };
-  await writeDb(db);
+  return db;
+}
+
+async function seedDb() {
+  await mkdir(DATA_DIR, { recursive: true });
+  if (existsSync(DB_PATH)) return;
+  const db = await createSeedDb();
+  await writeJsonDb(db);
 }
 
 function parseCookies(req) {

@@ -4558,13 +4558,66 @@ input:focus-visible {
 
 .game-detail-page .game-detail-hero {
   background:
-    linear-gradient(135deg, color-mix(in srgb, var(--game-accent, #075bd5) 10%, #fff), #fff 58%),
-    var(--game-tint, #eef6ff);
+    linear-gradient(135deg, color-mix(in srgb, var(--game-accent, #075bd5) 74%, #000), color-mix(in srgb, var(--game-accent-2, #18a0fb) 82%, #fff)),
+    var(--game-accent, #075bd5);
   border-color: color-mix(in srgb, var(--game-accent, #075bd5) 24%, #dbe6f3);
+  color: #fff;
 }
 
 .game-detail-page .game-detail-hero h1 {
-  color: color-mix(in srgb, var(--game-accent, #075bd5) 82%, #111827);
+  color: #fff;
+}
+
+.game-detail-page .game-detail-hero p,
+.game-detail-page .game-detail-hero span {
+  color: rgba(255, 255, 255, .9);
+}
+
+.game-detail-page .game-detail-hero nav a {
+  position: relative;
+  isolation: isolate;
+  box-shadow:
+    0 3px 0 rgba(7, 26, 60, .18),
+    0 10px 20px rgba(7, 26, 60, .22),
+    inset 0 1px 0 rgba(255, 255, 255, .34),
+    inset 0 -1px 0 rgba(7, 26, 60, .12);
+  transition: transform .16s ease, box-shadow .18s ease, filter .18s ease;
+}
+
+.game-detail-page .game-detail-hero nav a::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  border-radius: inherit;
+  background: linear-gradient(180deg, rgba(255, 255, 255, .16), rgba(255, 255, 255, 0));
+  opacity: .78;
+  transition: opacity .18s ease;
+}
+
+.game-detail-page .game-detail-hero nav a:hover,
+.game-detail-page .game-detail-hero nav a:focus-visible {
+  transform: translateY(-2px);
+  filter: saturate(1.08) brightness(1.04);
+  box-shadow:
+    0 4px 0 rgba(7, 26, 60, .16),
+    0 14px 26px rgba(7, 26, 60, .28),
+    inset 0 1px 0 rgba(255, 255, 255, .42),
+    inset 0 -1px 0 rgba(7, 26, 60, .10);
+  outline: none;
+}
+
+.game-detail-page .game-detail-hero nav a:hover::after,
+.game-detail-page .game-detail-hero nav a:focus-visible::after {
+  opacity: 1;
+}
+
+.game-detail-page .game-detail-hero nav a:active {
+  transform: translateY(1px);
+  box-shadow:
+    0 1px 0 rgba(7, 26, 60, .18),
+    0 6px 14px rgba(7, 26, 60, .18),
+    inset 0 1px 0 rgba(255, 255, 255, .28);
 }
 
 .game-detail-page .trade-board > .trade-filter {
@@ -8228,4 +8281,56 @@ main,
   overflow: hidden;
   opacity: 0;
   pointer-events: none;
+}
+
+/* Keep the global header search stable at narrow widths. */
+.topbar .search {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 28px;
+  gap: 8px;
+  border-color: #111827;
+}
+
+.topbar .search:hover,
+.topbar .search:focus-within {
+  border-color: var(--blue);
+}
+
+.topbar .search-field {
+  min-width: 0;
+}
+
+.topbar .search-field input,
+.topbar .search input[type="text"],
+.topbar .search input:not([type]) {
+  display: block;
+  width: 100%;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.topbar .search .search-icon {
+  align-self: center;
+  justify-self: end;
+  width: 28px;
+  height: 28px;
+  min-width: 28px;
+  max-width: 28px;
+  min-height: 28px;
+  max-height: 28px;
+  padding: 0;
+  border: 0;
+  line-height: 0;
+  box-sizing: border-box;
+}
+
+@media (max-width: 760px) {
+  .topbar .search {
+    grid-template-columns: minmax(0, 1fr) 28px;
+    min-height: 42px;
+    padding: 5px 7px 5px 12px;
+    border-radius: 18px;
+  }
 }
