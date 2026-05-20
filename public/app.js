@@ -534,7 +534,7 @@ document.addEventListener("keydown", (event) => {
 });
 
 const bannerTrack = $(".hero-banner-track");
-const bannerSlides = $$(".hero-banner-image", bannerTrack);
+const bannerSlides = bannerTrack ? $$(".hero-banner-image", bannerTrack) : [];
 if (bannerTrack && bannerSlides.length > 1) {
   const slideCount = bannerSlides.length;
   const step = 100 / slideCount;
