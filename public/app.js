@@ -416,6 +416,45 @@ document.addEventListener("click", (event) => {
   if (input) input.value = Number(input.value || 0) + Number(preset.dataset.pricePreset || 0);
 });
 
+function applyMarketPanelFilters(panel, next = {}) {
+  if (!panel) return;
+  const url = new URL(location.href);
+  const from = "priceFrom" in next ? next.priceFrom : panel.querySelector("[data-market-price-from]")?.value;
+  const to = "priceTo" in next ? next.priceTo : panel.querySelector("[data-market-price-to]")?.value;
+  const keyword = "keyword" in next ? next.keyword : panel.querySelector("[data-market-keyword]")?.value;
+  if (Number(from || 0) > 0) url.searchParams.set("priceFrom", String(Number(from || 0)));
+  else url.searchParams.delete("priceFrom");
+  if (Number(to || 0) > 0) url.searchParams.set("priceTo", String(Number(to || 0)));
+  else url.searchParams.delete("priceTo");
+  if (String(keyword || "").trim()) url.searchParams.set("q", String(keyword || "").trim());
+  else url.searchParams.delete("q");
+  location.href = url.toString();
+}
+
+document.addEventListener("click", (event) => {
+  const priceButton = event.target.closest("[data-market-price-button]");
+  if (priceButton) {
+    applyMarketPanelFilters(priceButton.closest(".market-panel"), {
+      priceFrom: priceButton.dataset.priceFrom || "0",
+      priceTo: priceButton.dataset.priceTo || "0"
+    });
+    return;
+  }
+  const searchButton = event.target.closest("[data-market-search]");
+  if (searchButton) {
+    applyMarketPanelFilters(searchButton.closest(".market-panel"));
+  }
+});
+
+document.addEventListener("keydown", (event) => {
+  const keywordInput = event.target.closest("[data-market-keyword]");
+  const priceInput = event.target.closest("[data-market-price-from], [data-market-price-to]");
+  if ((keywordInput || priceInput) && event.key === "Enter") {
+    event.preventDefault();
+    applyMarketPanelFilters(event.target.closest(".market-panel"));
+  }
+});
+
 const bannerDots = $$(".banner-dots i");
 if (bannerDots.length) {
   let activeBannerDot = 0;
@@ -868,13 +907,113 @@ function updateSignupPasswordState(form) {
   return true;
 }
 
+function signupPhoneValue(form) {
+  return `${form.elements.phoneCarrier?.value || ""}|${form.elements.phonePrefix?.value || ""}${form.elements.phoneMid?.value || ""}${form.elements.phoneLast?.value || ""}`;
+}
+
+function signupPhoneReady(form) {
+  return Boolean(form.elements.phoneMid?.value.length === 4 && form.elements.phoneLast?.value.length === 4);
+}
+
+function setSignupFraudChecked(form, checked = false) {
+  form.dataset.fraudChecked = checked ? "true" : "false";
+  form.dataset.fraudPhone = checked ? signupPhoneValue(form) : "";
+  const registerButton = $("#register-btn", form);
+  if (registerButton) registerButton.disabled = !checked;
+  const state = $("[data-fraud-check-state]", form);
+  if (state) {
+    state.className = `desc ${checked ? "ok" : ""}`;
+    state.textContent = checked ? "사기번호조회가 완료되었습니다." : "핸드폰번호 입력 후 사기번호조회를 진행해주세요.";
+  }
+}
+
+function updateSignupFraudButton(form) {
+  const button = $("[data-fraud-check]", form);
+  if (!button) return;
+  const currentPhone = signupPhoneValue(form);
+  if (form.dataset.fraudChecked === "true" && form.dataset.fraudPhone !== currentPhone) setSignupFraudChecked(form, false);
+  button.disabled = !signupPhoneReady(form);
+}
+
+function openFraudCheckModal(form) {
+  const modal = $("[data-fraud-check-modal]");
+  const button = $("[data-fraud-check]", form);
+  if (!modal || !button) return;
+  button.disabled = true;
+  modal.hidden = false;
+  modal.innerHTML = `<section class="fraud-check-card" role="dialog" aria-modal="true" aria-labelledby="fraudCheckTitle">
+    <div class="fraud-check-spinner" aria-hidden="true"></div>
+    <h2 id="fraudCheckTitle">핸드폰번호 조회 중</h2>
+    <p>피해 신고 이력을 확인하고 있습니다.</p>
+  </section>`;
+  setTimeout(() => {
+    modal.innerHTML = `<section class="fraud-check-card fraud-check-card--done" role="dialog" aria-modal="true" aria-labelledby="fraudCheckTitle">
+      <div class="fraud-check-result-check" aria-hidden="true">✓</div>
+      <h2 id="fraudCheckTitle">핸드폰번호 조회결과</h2>
+      <p class="fraud-check-result-main">피해 신고 이력이 없습니다.</p>
+      <p class="fraud-check-result-sub">회원가입이 가능합니다.</p>
+      <button type="button" data-fraud-check-ok>확인</button>
+    </section>`;
+    modal.querySelector("[data-fraud-check-ok]")?.focus();
+  }, 3800);
+}
+
+function tradeFraudModal() {
+  let modal = $("[data-trade-fraud-modal]");
+  if (modal) return modal;
+  modal = document.createElement("div");
+  modal.className = "fraud-check-layer";
+  modal.hidden = true;
+  modal.dataset.tradeFraudModal = "";
+  document.body.appendChild(modal);
+  return modal;
+}
+
+function openTradeFraudModal() {
+  const modal = tradeFraudModal();
+  modal.hidden = false;
+  modal.innerHTML = `<section class="fraud-check-card" role="dialog" aria-modal="true" aria-labelledby="tradeFraudCheckTitle">
+    <div class="fraud-check-spinner" aria-hidden="true"></div>
+    <h2 id="tradeFraudCheckTitle">거래 사기 실시간 조회 중</h2>
+    <p>피해 신고 이력을 확인하고 있습니다.</p>
+  </section>`;
+  setTimeout(() => {
+    if (modal.hidden) return;
+    modal.innerHTML = `<section class="fraud-check-card fraud-check-card--done" role="dialog" aria-modal="true" aria-labelledby="tradeFraudCheckTitle">
+      <div class="fraud-check-result-check" aria-hidden="true">✓</div>
+      <h2 id="tradeFraudCheckTitle">거래 사기 실시간 조회</h2>
+      <p class="fraud-check-result-main">피해 신고 이력이 없습니다.</p>
+      <p class="fraud-check-result-sub">거래가 가능합니다.</p>
+      <button type="button" data-trade-fraud-ok>확인</button>
+    </section>`;
+    modal.querySelector("[data-trade-fraud-ok]")?.focus();
+  }, 3200);
+}
+
 const signupForm = $('form[data-form="signup"]');
 if (signupForm) {
   $$("input[name='phoneMid'], input[name='phoneLast']", signupForm).forEach((input) => {
     input.addEventListener("input", () => {
       input.value = input.value.replace(/\D/g, "").slice(0, 4);
+      setSignupFraudChecked(signupForm, false);
+      updateSignupFraudButton(signupForm);
       if (input.value.length === 4 && input.name === "phoneMid") signupForm.elements.phoneLast?.focus();
     });
+  });
+  signupForm.elements.phoneCarrier?.addEventListener("change", () => {
+    setSignupFraudChecked(signupForm, false);
+    updateSignupFraudButton(signupForm);
+  });
+  $("[data-fraud-check]", signupForm)?.addEventListener("click", () => {
+    if (!signupPhoneReady(signupForm)) return;
+    openFraudCheckModal(signupForm);
+  });
+  document.addEventListener("click", (event) => {
+    if (!event.target.closest("[data-fraud-check-ok]")) return;
+    const modal = $("[data-fraud-check-modal]");
+    if (modal) modal.hidden = true;
+    setSignupFraudChecked(signupForm, true);
+    updateSignupFraudButton(signupForm);
   });
   ["username", "nickname"].forEach((field) => {
     let timer = null;
@@ -886,7 +1025,20 @@ if (signupForm) {
   });
   signupForm.elements.password?.addEventListener("input", () => updateSignupPasswordState(signupForm));
   signupForm.elements.passwordConfirm?.addEventListener("input", () => updateSignupPasswordState(signupForm));
+  setSignupFraudChecked(signupForm, false);
+  updateSignupFraudButton(signupForm);
 }
+
+document.addEventListener("click", (event) => {
+  if (event.target.closest("[data-trade-fraud-check]")) {
+    openTradeFraudModal();
+    return;
+  }
+  if (event.target.closest("[data-trade-fraud-ok]")) {
+    const modal = $("[data-trade-fraud-modal]");
+    if (modal) modal.hidden = true;
+  }
+});
 
 $$("form[data-form]").forEach((form) => {
   form.addEventListener("submit", async (event) => {
@@ -900,6 +1052,10 @@ $$("form[data-form]").forEach((form) => {
         await post("/api/login", data);
         location.href = "/";
       } else if (type === "signup") {
+        if (form.dataset.fraudChecked !== "true" || form.dataset.fraudPhone !== signupPhoneValue(form)) {
+          message.textContent = "사기번호조회를 먼저 완료해주세요.";
+          return;
+        }
         if (!updateSignupPasswordState(form)) {
           message.textContent = "패스워드를 확인해주세요.";
           return;
@@ -934,14 +1090,20 @@ $$("form[data-form]").forEach((form) => {
       } else if (type === "site") {
         await post("/api/admin/site", data);
         message.textContent = "저장되었습니다.";
-      } else if (type === "notice") {
+      } else if (type === "notice" || type === "notice-edit") {
         syncNoticeEditor(form);
         syncNoticeDate(form);
         data.body = form.elements.body?.value || "";
         data.createdAt = form.elements.createdAt?.value || "";
-        await post("/api/admin/notice", data);
-        message.textContent = "공지사항이 추가되었습니다.";
-        setTimeout(() => location.reload(), 450);
+        if (type === "notice-edit") {
+          const result = await post("/api/admin/notice/update", data);
+          message.textContent = "공지사항이 수정되었습니다.";
+          setTimeout(() => { location.href = `/notices/${encodeURIComponent(result.id || data.id)}`; }, 450);
+        } else {
+          await post("/api/admin/notice", data);
+          message.textContent = "공지사항이 추가되었습니다.";
+          setTimeout(() => location.reload(), 450);
+        }
       } else if (type === "staff") {
         await post("/api/admin/staff", data);
         location.reload();

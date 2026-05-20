@@ -537,6 +537,12 @@ function noticeCreatedAt(value) {
   return Number.isNaN(parsed.getTime()) ? now() : parsed.toISOString();
 }
 
+function noticeInputDateValue(value) {
+  const date = new Date(value || now());
+  const safeDate = Number.isNaN(date.getTime()) ? new Date() : date;
+  return new Date(safeDate.getTime() - safeDate.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+}
+
 function noticeContentStyle(post = {}) {
   const family = {
     default: "",
@@ -1097,6 +1103,9 @@ function marketControlPanel(game, selected = {}) {
   const kind = selected.kind || "all";
   const server = selected.server || "서버전체";
   const filterValues = selected.filters || {};
+  const priceFrom = Math.max(0, Number(selected.priceFrom || 0));
+  const priceTo = Math.max(0, Number(selected.priceTo || 0));
+  const keyword = String(selected.keyword || "").trim();
   const sideTabs = [["all", "전체"], ["sell", "팝니다"], ["buy", "삽니다"]];
   const kinds = ["전체", ...gameTradeKinds(game)];
   const servers = gameServerList(game);
@@ -1105,6 +1114,12 @@ function marketControlPanel(game, selected = {}) {
     params.set("side", next.side || side);
     params.set("kind", next.kind || kind);
     params.set("server", next.server || server);
+    const nextPriceFrom = "priceFrom" in next ? Number(next.priceFrom || 0) : priceFrom;
+    const nextPriceTo = "priceTo" in next ? Number(next.priceTo || 0) : priceTo;
+    const nextKeyword = "keyword" in next ? String(next.keyword || "").trim() : keyword;
+    if (nextPriceFrom) params.set("priceFrom", String(nextPriceFrom));
+    if (nextPriceTo) params.set("priceTo", String(nextPriceTo));
+    if (nextKeyword) params.set("q", nextKeyword);
     const nextFilters = { ...filterValues, ...(next.filters || {}) };
     Object.entries(nextFilters).forEach(([key, value]) => {
       if (value) params.set(key, value);
@@ -1116,7 +1131,12 @@ function marketControlPanel(game, selected = {}) {
     const selectedValue = filterValues[key] || filter.values[0];
     return `<div class="market-panel__row"><b>${esc(filter.label)}</b><div>${filter.values.slice(0, 48).map((item, index) => `<a class="${item === selectedValue || (!filterValues[key] && index === 0) ? "active-soft" : ""}" href="${panelHref({ filters: { [key]: item } })}">${esc(item)}</a>`).join("")}</div></div>`;
   }).join("");
-  const priceButtons = gamePriceRanges(game).map((range) => `<button type="button" data-price-from="${Number(range.from || 0)}" data-price-to="${Number(range.to || 0)}">${esc(range.label)}</button>`).join("");
+  const priceButtons = gamePriceRanges(game).map((range) => {
+    const from = Number(range.from || 0);
+    const to = Number(range.to || 0);
+    const active = from === priceFrom && to === priceTo;
+    return `<button class="${active ? "active-soft" : ""}" type="button" data-market-price-button data-price-from="${from}" data-price-to="${to}">${esc(range.label)}</button>`;
+  }).join("");
   return `<section class="market-panel" ${gameThemeStyle(game)}>
     <div class="market-panel__tabs">${kinds.map((item) => {
       const value = item === "전체" ? "all" : item;
@@ -1129,8 +1149,8 @@ function marketControlPanel(game, selected = {}) {
       return `<a class="${kind === value ? "active" : ""}" href="${panelHref({ kind: value })}">${item}</a>`;
     }).join("")}</div></div>
     ${extraFilters}
-    <div class="market-panel__row market-panel__price"><b>가격</b><div><span>직접입력</span><input value="0" readonly><small>만원</small><i>-</i><input value="0" readonly><small>만원</small>${priceButtons}</div></div>
-    <div class="market-panel__row market-panel__search"><b>제목+내용</b><div><input placeholder="검색어를 입력해주세요."><button type="button" aria-label="검색">⌕</button></div></div>
+    <div class="market-panel__row market-panel__price"><b>가격</b><div><span>직접입력</span><input data-market-price-from inputmode="numeric" type="number" min="0" value="${priceFrom}"><small>만원</small><i>-</i><input data-market-price-to inputmode="numeric" type="number" min="0" value="${priceTo}"><small>만원</small>${priceButtons}</div></div>
+    <div class="market-panel__row market-panel__search"><b>제목+내용</b><div><input data-market-keyword value="${esc(keyword)}" placeholder="검색어를 입력해주세요."><button type="button" data-market-search aria-label="검색"><span aria-hidden="true"></span></button></div></div>
   </section>`;
 }
 
@@ -1212,13 +1232,17 @@ function renderTradeCard(post, db, owner = false) {
   const statusOptions = post.type === "sell" ? ["판매중", "판매 진행중", "판매완료", "숨김"] : ["구매중", "구매 진행중", "구매완료", "숨김"];
   const status = post.status || (post.type === "sell" ? "판매중" : "구매중");
   const displayStatus = tradeStatusLabel(status, post.type);
+  const quantity = Math.max(0, Number(post.quantity || 0));
+  const unitPrice = quantity ? Math.floor(Number(post.price || 0) / quantity) : 0;
   return `<article class="trade-card" data-trade-card>
     <a class="trade-card__link" href="${tradeHref(post)}" aria-label="${esc(post.title || "거래글")} 상세보기"></a>
-    <div class="trade-card__meta"><span class="${post.type}">${sideLabel}</span><b>${esc(tradeKindLabel(post.tradeKind || post.category))}</b><b>${esc(post.unit || "일반")}</b>${displayStatus ? `<em class="${tradeStatusClass(displayStatus)}">[${esc(displayStatus)}]</em>` : ""}</div>
-    <h3>${esc(post.title || "제목 없음")}</h3>
-    <p>${esc(post.gameName || post.game)} · ${esc(post.server || "서버전체")}</p>
-    <strong>${won(post.price)}</strong>
-    <small>${esc(displayMember.nickname)} · ${new Date(post.createdAt).toLocaleDateString("ko-KR")}</small>
+    <img class="trade-card__grade" src="${gradeAsset(displayMember.displayGrade)}" alt="${esc(displayMember.displayGrade)}">
+    <div class="trade-card__main">
+      <div class="trade-card__meta"><span class="${post.type}">${sideLabel}</span><b>${esc(tradeKindLabel(post.tradeKind || post.category))}</b><b>${esc(post.unit || "일반")}</b>${displayStatus ? `<em class="${tradeStatusClass(displayStatus)}">[${esc(displayStatus)}]</em>` : ""}</div>
+      <h3>${esc(post.title || "제목 없음")}</h3>
+      <small>${esc(displayMember.nickname)} · ${new Date(post.createdAt).toLocaleDateString("ko-KR")}</small>
+    </div>
+    <div class="trade-card__side"><p>${esc(post.gameName || post.game)} · ${esc(post.server || "서버전체")}</p>${unitPrice ? `<span>1개당 ${won(unitPrice)}</span>` : ""}<strong>${won(post.price)}</strong></div>
     ${owner ? `<label class="status-update">상태<select data-trade-status="${esc(post.id)}" data-trade-type="${post.type}">${statusOptions.map((item) => `<option value="${esc(item)}" ${item === status ? "selected" : ""}>${esc(tradeStatusLabel(item, post.type) || item)}</option>`).join("")}</select></label>` : ""}
   </article>`;
 }
@@ -1498,7 +1522,10 @@ function tradeDetailPage(user, db, type, postId) {
           </dl>
         </section>
         <section class="trade-detail-section">
-          <div class="trade-detail-section-head"><h2>${memberTitle}</h2></div>
+          <div class="trade-detail-section-head">
+            <h2>${memberTitle}</h2>
+            <button type="button" class="trade-fraud-button" data-trade-fraud-check><span aria-hidden="true">▲</span> 거래사기 피해이력 조회</button>
+          </div>
           <div class="trade-member-card">
             <img src="${gradeAsset(displayMember.displayGrade)}" alt="${esc(displayMember.displayGrade)}">
             <strong>${esc(displayMember.displayGrade)}</strong>
@@ -1742,13 +1769,22 @@ function authPage(user, mode) {
             <input name="phoneMid" inputmode="numeric" maxlength="4" placeholder="0000" required>
             <input name="phoneLast" inputmode="numeric" maxlength="4" placeholder="0000" required>
           </div>
+          <button class="fraud-check-button" type="button" data-fraud-check disabled>사기 번호 조회</button>
+          <div class="desc" data-fraud-check-state>핸드폰번호 입력 후 사기번호조회를 진행해주세요.</div>
         </div>
         <div class="input-wrap register-actions">
-          <button id="register-btn" type="submit">회원가입</button>
+          <button id="register-btn" type="submit" disabled>회원가입</button>
           <a class="button" id="go-back" href="/">회원가입 취소</a>
         </div>
         <p class="form-message"></p>
       </form>
+      <div class="fraud-check-layer" data-fraud-check-modal hidden>
+        <section class="fraud-check-card" role="dialog" aria-modal="true" aria-labelledby="fraudCheckTitle">
+          <div class="fraud-check-spinner" aria-hidden="true"></div>
+          <h2 id="fraudCheckTitle">핸드폰번호 조회 중</h2>
+          <p>피해 신고 이력을 확인하고 있습니다.</p>
+        </section>
+      </div>
     </div>
   </section>`;
   return layout(isSignup ? "회원가입" : "로그인", user, `<main class="auth-page">
@@ -1790,12 +1826,28 @@ function gameDetailPage(user, db, slug, filters = {}) {
   const kind = ["all", ...availableKinds].includes(filters.kind) ? filters.kind : "all";
   const server = filters.server || "서버전체";
   const extraFilters = filters.filters || {};
-  const posts = allTrades(db).filter((post) => (post.gameSlug === game.slug || post.gameName === game.name || post.game === game.name) && (side === "all" || post.type === side) && (kind === "all" || tradeKindLabel(post.tradeKind || post.category) === kind) && (server === "서버전체" || (post.server || "서버전체") === server)).sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)));
+  const priceFrom = Math.max(0, Number(filters.priceFrom || 0));
+  const priceTo = Math.max(0, Number(filters.priceTo || 0));
+  const keyword = String(filters.keyword || "").trim().toLowerCase();
+  const posts = allTrades(db).filter((post) => {
+    const priceMan = Math.floor(Number(post.price || 0) / 10000);
+    const haystack = `${post.title || ""} ${post.descriptionText || ""} ${post.description || ""}`.toLowerCase();
+    return (post.gameSlug === game.slug || post.gameName === game.name || post.game === game.name)
+      && (side === "all" || post.type === side)
+      && (kind === "all" || tradeKindLabel(post.tradeKind || post.category) === kind)
+      && (server === "서버전체" || (post.server || "서버전체") === server)
+      && (!priceFrom || priceMan >= priceFrom)
+      && (!priceTo || priceMan <= priceTo)
+      && (!keyword || haystack.includes(keyword));
+  }).sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)));
   const filterHref = (nextSide, nextKind) => {
     const params = new URLSearchParams();
     params.set("side", nextSide);
     params.set("kind", nextKind);
     params.set("server", server);
+    if (priceFrom) params.set("priceFrom", String(priceFrom));
+    if (priceTo) params.set("priceTo", String(priceTo));
+    if (keyword) params.set("q", keyword);
     Object.entries(extraFilters).forEach(([key, value]) => {
       if (value) params.set(key, value);
     });
@@ -1809,7 +1861,7 @@ function gameDetailPage(user, db, slug, filters = {}) {
       <nav><a class="sell" href="/sell?game=${encodeURIComponent(game.slug)}">판매등록</a><a class="buy" href="/buy?game=${encodeURIComponent(game.slug)}">구매등록</a></nav>
     </section>
     <section class="trade-board">
-      ${marketControlPanel(game, { side, kind, server, filters: extraFilters })}
+      ${marketControlPanel(game, { side, kind, server, filters: extraFilters, priceFrom, priceTo, keyword })}
       <div class="trade-filter">
         ${["all", "sell", "buy"].map((item) => `<a class="${side === item ? "active" : ""}" href="${filterHref(item, kind)}">${item === "all" ? "전체" : item === "sell" ? "판매글" : "구매글"}</a>`).join("")}
         ${["all", ...availableKinds].map((item) => `<a class="${kind === item ? "active" : ""}" href="${filterHref(side, item)}">${item === "all" ? "전체유형" : item}</a>`).join("")}
@@ -2149,7 +2201,9 @@ function adminPage(user, db, paging = {}) {
   const usersPager = adminPager(usersPaged, pageParams, "userPage", "userSize");
   const pointPager = adminPager(pointRequestsPaged, pageParams, "pointPage", "pointSize", "pointRequests");
   const latestNotices = noticePosts(db).slice(0, 6).map((post) => `<li><a href="/notices/${encodeURIComponent(post.id)}">${post.pinned ? "[상단고정] " : ""}${esc(post.title)}</a><span>${noticeDate(post.createdAt)}</span></li>`).join("");
-  const noticeInputDate = new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+  const editNotice = paging.noticeEdit ? (db.site?.posts || []).find((post) => post.id === paging.noticeEdit) : null;
+  const editingNotice = Boolean(editNotice);
+  const noticeInputDate = noticeInputDateValue(editNotice?.createdAt);
   const noticeInputDay = noticeInputDate.slice(0, 10);
   const noticeInputTime = noticeInputDate.slice(11, 16);
   return layout("관리자", user, `<main class="admin-page">
@@ -2157,7 +2211,7 @@ function adminPage(user, db, paging = {}) {
     <nav class="admin-tools">
       <button type="button" data-admin-panel-toggle="account">계좌번호등록</button>
       <button type="button" data-admin-panel-toggle="staff">운영진계정생성</button>
-      <button type="button" data-admin-panel-toggle="notice">공지사항관리</button>
+      <button type="button" data-admin-panel-toggle="notice" ${editingNotice ? "class=\"active\"" : ""}>공지사항관리</button>
       <a href="/admin_write">글 작성(관리자권한)</a>
     </nav>
     <section class="admin-grid">
@@ -2172,10 +2226,11 @@ function adminPage(user, db, paging = {}) {
         <select name="role"><option>STAFF</option></select><button>생성</button><p class="form-message"></p>
       </form>
     </section>
-    <section class="panel admin-notice-panel admin-collapsible-panel" data-admin-panel="notice" hidden>
-      <div class="admin-notice-head"><h2>공지사항 관리</h2></div>
-      <form class="admin-notice-form" data-form="notice">
-        <label class="admin-check"><input type="checkbox" name="pinned"> 상단고정</label>
+    <section class="panel admin-notice-panel admin-collapsible-panel" data-admin-panel="notice" ${editingNotice ? "" : "hidden"}>
+      <div class="admin-notice-head"><h2>${editingNotice ? "공지사항 수정" : "공지사항 관리"}</h2></div>
+      <form class="admin-notice-form" data-form="${editingNotice ? "notice-edit" : "notice"}">
+        ${editingNotice ? `<input type="hidden" name="id" value="${esc(editNotice.id)}">` : ""}
+        <label class="admin-check"><input type="checkbox" name="pinned" ${editNotice?.pinned ? "checked" : ""}> 상단고정</label>
         <div class="admin-notice-date">
           <span>공지 날짜</span>
           <input type="hidden" name="createdAt" value="${noticeInputDate}">
@@ -2187,7 +2242,7 @@ function adminPage(user, db, paging = {}) {
             <button type="button" data-notice-date-now>현재시간</button>
           </div>
         </div>
-        <input name="title" placeholder="제목" required>
+        <input name="title" placeholder="제목" value="${esc(editNotice?.title || "")}" required>
         <input type="hidden" name="body" required>
         <div class="notice-editor-toolbar">
           <select data-notice-font><option value="Malgun Gothic">맑은 고딕</option><option value="serif">명조 계열</option><option value="monospace">고정폭</option></select>
@@ -2197,8 +2252,8 @@ function adminPage(user, db, paging = {}) {
           <button type="button" data-notice-image>사진첨부</button>
           <input type="file" accept="image/*" data-notice-file hidden>
         </div>
-        <div class="notice-rich-editor" contenteditable="true" data-notice-editor aria-label="공지 내용 편집기"><p>내용을 입력하세요.</p></div>
-        <button>공지 저장</button><p class="form-message"></p>
+        <div class="notice-rich-editor" contenteditable="true" data-notice-editor aria-label="공지 내용 편집기">${editingNotice ? noticeBodyHtml(editNotice.body) : "<p>내용을 입력하세요.</p>"}</div>
+        <button>${editingNotice ? "공지 수정" : "공지 저장"}</button>${editingNotice ? `<a class="admin-notice-cancel" href="/notices/${encodeURIComponent(editNotice.id)}">수정 취소</a>` : ""}<p class="form-message"></p>
       </form>
       <ul class="admin-notice-list">${latestNotices}</ul>
     </section>
@@ -2265,7 +2320,7 @@ function noticesPage(user, db, page = 1) {
 function noticeDetailPage(user, db, postId) {
   const post = (db.site?.posts || []).find((item) => item.id === postId);
   if (!post) return layout("공지사항", user, `<main class="notice-page"><h1>공지사항</h1><section class="notice-detail-card"><p>공지사항을 찾을 수 없습니다.</p></section><a class="notice-list-button" href="/notices">목록</a>${chatWidget(user)}</main>`, "notice");
-  const canDelete = canAdmin(user);
+  const canManage = canAdmin(user);
   return layout(post.title, user, `<main class="notice-page">
     <h1><a href="/notices">공지사항</a></h1>
     <article class="notice-detail-card">
@@ -2275,7 +2330,7 @@ function noticeDetailPage(user, db, postId) {
     </article>
     <div class="notice-detail-actions">
       <a class="notice-list-button" href="/notices">☰ 목록</a>
-      ${canDelete ? `<button type="button" class="notice-delete-button" data-notice-delete="${esc(post.id)}">삭제</button>` : ""}
+      ${canManage ? `<a class="notice-edit-button" href="/admin?noticeEdit=${encodeURIComponent(post.id)}">수정</a><button type="button" class="notice-delete-button" data-notice-delete="${esc(post.id)}">삭제</button>` : ""}
     </div>
     ${chatWidget(user)}
   </main>`, "notice");
@@ -2600,6 +2655,24 @@ async function api(req, res, db, user, pathname) {
       audit(db, user, "NOTICE_CREATE");
       await writeDb(db);
       return send(res, 200, { ok: true });
+    }
+    if (pathname === "/api/admin/notice/update" && req.method === "POST") {
+      if (!protect(user, "admin")) return send(res, 403, { error: "권한이 없습니다." });
+      const data = await body(req);
+      const target = (db.site.posts || []).find((post) => post.id === data.id);
+      if (!target) return send(res, 404, { error: "공지사항을 찾을 수 없습니다." });
+      const title = String(data.title || "").trim();
+      const noticeBody = sanitizeNoticeHtml(String(data.body || "").trim());
+      if (!title || !noticeBody) return send(res, 400, { error: "제목과 내용을 입력하세요." });
+      target.title = title;
+      target.body = noticeBody;
+      target.pinned = data.pinned === "on" || data.pinned === true;
+      target.updatedAt = now();
+      target.updatedBy = user.id;
+      target.createdAt = noticeCreatedAt(data.createdAt);
+      audit(db, user, "NOTICE_UPDATE", target.id);
+      await writeDb(db);
+      return send(res, 200, { ok: true, id: target.id });
     }
     if (pathname === "/api/admin/notice/delete" && req.method === "POST") {
       if (!canAdmin(user)) return send(res, 403, { error: "권한이 없습니다." });
@@ -3032,7 +3105,7 @@ async function router(req, res) {
     url.searchParams.forEach((value, key) => {
       if (/^f\d+$/.test(key)) panelFilters[key] = value;
     });
-    return send(res, 200, gameDetailPage(user, db, decodeURIComponent(url.pathname.split("/").pop()), { side: url.searchParams.get("side") || "all", kind: url.searchParams.get("kind") || "all", server: url.searchParams.get("server") || "서버전체", filters: panelFilters }));
+    return send(res, 200, gameDetailPage(user, db, decodeURIComponent(url.pathname.split("/").pop()), { side: url.searchParams.get("side") || "all", kind: url.searchParams.get("kind") || "all", server: url.searchParams.get("server") || "서버전체", filters: panelFilters, priceFrom: url.searchParams.get("priceFrom") || "0", priceTo: url.searchParams.get("priceTo") || "0", keyword: url.searchParams.get("q") || "" }));
   }
   if (url.pathname === "/sell") return protect(user, "member") ? send(res, 200, registerPage(user, "sell", db, url.searchParams.get("game") || "")) : redirect(res, "/login");
   if (url.pathname === "/buy") return protect(user, "member") ? send(res, 200, registerPage(user, "buy", db, url.searchParams.get("game") || "")) : redirect(res, "/login");
@@ -3043,7 +3116,8 @@ async function router(req, res) {
     userPage: url.searchParams.get("userPage"),
     userSize: url.searchParams.get("userSize"),
     pointPage: url.searchParams.get("pointPage"),
-    pointSize: url.searchParams.get("pointSize")
+    pointSize: url.searchParams.get("pointSize"),
+    noticeEdit: url.searchParams.get("noticeEdit") || ""
   })) : redirect(res, "/login");
   if (url.pathname === "/admin_write") return protect(user, "admin") ? send(res, 200, adminWritePage(user, db, url.searchParams.get("game") || "")) : redirect(res, "/login");
   if (url.pathname === "/staff") return protect(user, "staff") ? send(res, 200, staffPage(user)) : redirect(res, "/login");
