@@ -1796,6 +1796,7 @@ input:focus-visible {
   display: flex;
   align-items: center;
   border-radius: 10px;
+  overflow: hidden;
   background:
     radial-gradient(circle at 18% 18%, rgba(255,255,255,.42), transparent 13%),
     radial-gradient(circle at 72% 28%, rgba(255,255,255,.24), transparent 18%),
@@ -1810,23 +1811,15 @@ input:focus-visible {
   position: relative;
   z-index: 1;
 }
-.banner-dots {
+.hero-banner-track {
   position: absolute;
-  left: 50%;
-  bottom: 16px;
+  inset: 0;
   display: flex;
-  gap: 8px;
-  transform: translateX(-50%);
-}
-.banner-dots i {
-  width: 18px;
-  height: 4px;
-  border-radius: 999px;
-  background: rgba(255,255,255,.7);
-}
-.banner-dots i.active {
-  width: 28px;
-  background: #0a6fe8;
+  width: 400%;
+  height: 100%;
+  transform: translateX(0);
+  transition: transform .78s cubic-bezier(.22, .72, .2, 1);
+  will-change: transform;
 }
 .quick-grid {
   border-radius: 8px;
@@ -2348,9 +2341,8 @@ input:focus-visible {
   box-shadow: none;
 }
 .hero-banner-image {
-  position: absolute;
-  inset: 0;
-  width: 100%;
+  flex: 0 0 25%;
+  width: 25%;
   height: 100%;
   display: block;
   object-fit: cover;

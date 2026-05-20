@@ -533,14 +533,25 @@ document.addEventListener("keydown", (event) => {
   }
 });
 
-const bannerDots = $$(".banner-dots i");
-if (bannerDots.length) {
-  let activeBannerDot = 0;
+const bannerTrack = $(".hero-banner-track");
+const bannerSlides = $$(".hero-banner-image", bannerTrack);
+if (bannerTrack && bannerSlides.length > 1) {
+  const slideCount = bannerSlides.length;
+  const step = 100 / slideCount;
+  let activeBanner = 0;
   setInterval(() => {
-    bannerDots[activeBannerDot]?.classList.remove("active");
-    activeBannerDot = (activeBannerDot + 1) % bannerDots.length;
-    bannerDots[activeBannerDot]?.classList.add("active");
-  }, 2800);
+    activeBanner += 1;
+    bannerTrack.style.transform = `translateX(-${activeBanner * step}%)`;
+    if (activeBanner === slideCount - 1) {
+      window.setTimeout(() => {
+        bannerTrack.style.transition = "none";
+        activeBanner = 0;
+        bannerTrack.style.transform = "translateX(0)";
+        bannerTrack.offsetHeight;
+        bannerTrack.style.transition = "";
+      }, 820);
+    }
+  }, 7000);
 }
 
 const featuredGameCards = $$(".hot-games .game-card");

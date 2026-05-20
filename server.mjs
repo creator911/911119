@@ -268,24 +268,23 @@ function normalizeDb(db) {
     db.site.banners[0].imageUrl = "";
     changed = true;
   }
-  const existingTitles = new Set((db.site.posts || []).map((post) => post.title));
-  for (const template of DEFAULT_NOTICE_POSTS) {
-    if (existingTitles.has(template.title)) continue;
-    db.site.posts.push({
-      id: id("post"),
-      title: template.title,
-      body: template.body,
-      displayName: "관리자",
-      authorId: db.users?.find((u) => u.role === "OWNER")?.id || db.users?.[0]?.id || null,
-      pinned: template.pinned,
-      noticeNo: template.noticeNo,
-      fontFamily: "default",
-      fontSize: "16",
-      fontWeight: "400",
-      createdAt: new Date(template.date).toISOString()
-    });
-    existingTitles.add(template.title);
-    changed = true;
+  if (!(db.site.posts || []).length) {
+    for (const template of DEFAULT_NOTICE_POSTS) {
+      db.site.posts.push({
+        id: id("post"),
+        title: template.title,
+        body: template.body,
+        displayName: "관리자",
+        authorId: db.users?.find((u) => u.role === "OWNER")?.id || db.users?.[0]?.id || null,
+        pinned: template.pinned,
+        noticeNo: template.noticeNo,
+        fontFamily: "default",
+        fontSize: "16",
+        fontWeight: "400",
+        createdAt: new Date(template.date).toISOString()
+      });
+      changed = true;
+    }
   }
   db.site.posts = (db.site.posts || []).map((post, index) => {
     const next = { ...post };
@@ -1757,8 +1756,12 @@ function homePage(user, db) {
   return layout("홈", user, `<main>
     <section class="hero-wrap">
       <div class="hero-banner">
-        <img class="hero-banner-image" src="/assets/banners/top-main-banner.png" alt="리니지 클래식 거래수수료 무료">
-        <div class="banner-dots"><i class="active"></i><i></i><i></i><i></i></div>
+        <div class="hero-banner-track">
+          <img class="hero-banner-image" src="/assets/banners/top-main-banner.png" alt="리니지 클래식 거래수수료 무료">
+          <img class="hero-banner-image" src="/assets/banners/aion-promo.png" alt="아이온 거래수수료 무료">
+          <img class="hero-banner-image" src="/assets/banners/maplestory-world-promo.png" alt="메이플스토리 월드">
+          <img class="hero-banner-image" src="/assets/banners/top-main-banner.png" alt="" aria-hidden="true">
+        </div>
       </div>
     </section>
     <section class="dashboard">
