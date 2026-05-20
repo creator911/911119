@@ -451,7 +451,7 @@ form button, .panel button {
 }
 .itemzone-register .desc {
   color: #8b95a5;
-  font-size: 12px;
+  font-size: inherit;
   line-height: 1.45;
 }
 .itemzone-register .desc.ok {
@@ -476,7 +476,7 @@ form button, .panel button {
   border-radius: 12px;
   background: #eff6ff;
   color: #64748b;
-  font-size: 12px;
+  font-size: 15px;
   font-weight: 900;
   white-space: nowrap;
 }
@@ -741,7 +741,7 @@ td button { margin-right: 6px; min-height: 34px; }
   border-radius: 7px;
   background: #fff;
   color: #075bdc;
-  font-size: 12px;
+  font-size: 15px;
   font-weight: 900;
 }
 
@@ -783,7 +783,7 @@ td button { margin-right: 6px; min-height: 34px; }
   border-radius: 7px;
   background: #fff;
   color: #075bdc;
-  font-size: 12px;
+  font-size: 15px;
   font-weight: 900;
   white-space: nowrap;
 }
@@ -6087,18 +6087,50 @@ input:focus-visible {
   color: #075bdc;
 }
 
-.notice-card li span {
+.notice-card li .notice-tag {
   display: inline-flex;
   align-items: center;
-  min-height: 20px;
-  padding: 0 7px;
-  border: 1px solid #9fc3ff;
-  border-radius: 4px;
-  background: #eaf3ff;
-  color: #075bdc;
-  font-size: 12px;
+  min-height: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: #0f172a;
+  font-size: 15px;
   font-weight: 900;
   white-space: nowrap;
+}
+
+.notice-dot {
+  flex: 0 0 auto;
+  width: 4px;
+  height: 4px;
+  margin-right: 4px;
+  border-radius: 50%;
+  background: #0f172a;
+}
+
+.notice-tag {
+  display: inline-flex;
+  align-items: center;
+  flex: 0 0 auto;
+  margin-right: 4px;
+  color: #0f172a;
+  font-weight: 900;
+  white-space: nowrap;
+}
+
+.notice-tag--info {
+  color: #075bdc;
+}
+
+.notice-tag--event {
+  color: #0f9f4f;
+}
+
+.notice-title-text {
+  min-width: 0;
+  color: inherit;
 }
 
 .notice-page {
@@ -6171,6 +6203,10 @@ input:focus-visible {
 }
 
 .notice-list-card td a {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
   color: #0f172a;
   font-weight: 800;
 }
@@ -6541,6 +6577,17 @@ input:focus-visible {
 .admin-check input {
   width: 18px;
   height: 18px;
+}
+
+.admin-notice-flags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 18px;
+  align-items: center;
+}
+
+.admin-notice-flags .admin-check {
+  min-height: 28px;
 }
 
 .admin-notice-date {

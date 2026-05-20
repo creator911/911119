@@ -165,6 +165,8 @@ function publicSeedPosts(seed, ownerId) {
     displayName: post.displayName || "관리자",
     authorId: ownerId,
     pinned: Boolean(post.pinned),
+    noticeInfo: Boolean(post.noticeInfo),
+    noticeEvent: Boolean(post.noticeEvent),
     fontFamily: post.fontFamily || "default",
     fontSize: String(post.fontSize || "16"),
     fontWeight: String(post.fontWeight || "400"),
@@ -456,6 +458,8 @@ function normalizeDb(db) {
         displayName: "관리자",
         authorId: db.users?.find((u) => u.role === "OWNER")?.id || db.users?.[0]?.id || null,
         pinned: template.pinned,
+        noticeInfo: Boolean(template.noticeInfo),
+        noticeEvent: Boolean(template.noticeEvent),
         noticeNo: template.noticeNo,
         fontFamily: "default",
         fontSize: "16",
@@ -469,6 +473,14 @@ function normalizeDb(db) {
     const next = { ...post };
     if (typeof next.pinned !== "boolean") {
       next.pinned = false;
+      changed = true;
+    }
+    if (typeof next.noticeInfo !== "boolean") {
+      next.noticeInfo = false;
+      changed = true;
+    }
+    if (typeof next.noticeEvent !== "boolean") {
+      next.noticeEvent = false;
       changed = true;
     }
     if (!next.displayName) {
@@ -766,6 +778,17 @@ function noticePosts(db) {
     if (Boolean(a.pinned) !== Boolean(b.pinned)) return a.pinned ? -1 : 1;
     return String(b.createdAt).localeCompare(String(a.createdAt));
   });
+}
+
+function noticeLabelHtml(post = {}) {
+  const labels = [];
+  if (post.noticeInfo) labels.push(["info", "안내"]);
+  if (post.noticeEvent) labels.push(["event", "이벤트"]);
+  return labels.map(([type, label]) => `<span class="notice-tag notice-tag--${type}">[${label}]</span>`).join("");
+}
+
+function noticeTitleHtml(post = {}, { dot = false } = {}) {
+  return `${dot ? "<span class=\"notice-dot\" aria-hidden=\"true\"></span>" : ""}${noticeLabelHtml(post)}<span class="notice-title-text">${esc(post.title)}</span>`;
 }
 
 function noticeDate(value, detail = false) {
@@ -1911,7 +1934,7 @@ function homePage(user, db) {
     const cls = g.active ? "game-card active" : "game-card";
     return `<article class="${cls}" tabindex="0"><img class="game-thumb" src="${g.thumbUrl}" alt="${g.name}"><img class="game-wide" src="${g.wideUrl}" alt=""><div><strong>${g.name}</strong><b>${g.trades.toLocaleString()}건</b><small>최근 ${g.recent.toLocaleString()}건의 거래</small></div></article>`;
   }).join("");
-  const notices = noticePosts(db).filter((post) => !post.pinned).slice(0, 5).map((post) => `<li><a href="/notices/${encodeURIComponent(post.id)}">${esc(post.title)}</a></li>`).join("");
+  const notices = noticePosts(db).filter((post) => !post.pinned).slice(0, 5).map((post) => `<li><a href="/notices/${encodeURIComponent(post.id)}">${noticeTitleHtml(post, { dot: true })}</a></li>`).join("");
   const points = Number(user?.points || 0).toLocaleString();
   const displayGrade = user?.displayGrade || "브론즈";
   const userSellOpenCount = user ? (db.sellPosts || []).filter((post) => post.userId === user.id && String(post.status || "판매중").replace(/\s/g, "") === "판매중").length : 0;
@@ -2486,7 +2509,7 @@ function adminPage(user, db, paging = {}) {
   }).join("");
   const usersPager = adminPager(usersPaged, pageParams, "userPage", "userSize");
   const pointPager = adminPager(pointRequestsPaged, pageParams, "pointPage", "pointSize", "pointRequests");
-  const latestNotices = noticePosts(db).slice(0, 6).map((post) => `<li><a href="/notices/${encodeURIComponent(post.id)}">${post.pinned ? "[상단고정] " : ""}${esc(post.title)}</a><span>${noticeDate(post.createdAt)}</span></li>`).join("");
+  const latestNotices = noticePosts(db).slice(0, 6).map((post) => `<li><a href="/notices/${encodeURIComponent(post.id)}">${post.pinned ? "[상단고정] " : ""}${noticeTitleHtml(post)}</a><span>${noticeDate(post.createdAt)}</span></li>`).join("");
   const editNotice = paging.noticeEdit ? (db.site?.posts || []).find((post) => post.id === paging.noticeEdit) : null;
   const editingNotice = Boolean(editNotice);
   const noticeInputDate = noticeInputDateValue(editNotice?.createdAt);
@@ -2528,7 +2551,11 @@ function adminPage(user, db, paging = {}) {
       <div class="admin-notice-head"><h2>${editingNotice ? "공지사항 수정" : "공지사항 관리"}</h2></div>
       <form class="admin-notice-form" data-form="${editingNotice ? "notice-edit" : "notice"}">
         ${editingNotice ? `<input type="hidden" name="id" value="${esc(editNotice.id)}">` : ""}
-        <label class="admin-check"><input type="checkbox" name="pinned" ${editNotice?.pinned ? "checked" : ""}> 상단고정</label>
+        <div class="admin-notice-flags">
+          <label class="admin-check"><input type="checkbox" name="pinned" ${editNotice?.pinned ? "checked" : ""}> 상단고정</label>
+          <label class="admin-check"><input type="checkbox" name="noticeInfo" ${editNotice?.noticeInfo ? "checked" : ""}> [안내]</label>
+          <label class="admin-check"><input type="checkbox" name="noticeEvent" ${editNotice?.noticeEvent ? "checked" : ""}> [이벤트]</label>
+        </div>
         <div class="admin-notice-date">
           <span>공지 날짜</span>
           <input type="hidden" name="createdAt" value="${noticeInputDate}">
@@ -2599,7 +2626,7 @@ function noticesPage(user, db, page = 1) {
   const pagePosts = regular.slice((safePage - 1) * pageSize, safePage * pageSize);
   const row = (post, index) => `<tr class="${post.pinned ? "is-pinned" : ""}">
     <td>${post.pinned ? "<span class='notice-badge'>공지</span>" : esc(post.noticeNo || regular.length - ((safePage - 1) * pageSize + index))}</td>
-    <td><a href="/notices/${encodeURIComponent(post.id)}">${post.pinned ? "<i>📣</i> " : ""}${esc(post.title)}</a></td>
+    <td><a href="/notices/${encodeURIComponent(post.id)}">${post.pinned ? "<i>📣</i> " : ""}${noticeTitleHtml(post, { dot: true })}</a></td>
     <td>관리자</td>
     <td>${noticeDate(post.createdAt)}</td>
   </tr>`;
@@ -2622,7 +2649,7 @@ function noticeDetailPage(user, db, postId) {
   return layout(post.title, user, `<main class="notice-page">
     <h1><a href="/notices">공지사항</a></h1>
     <article class="notice-detail-card">
-      <h2>${esc(post.title)}</h2>
+      <h2>${noticeLabelHtml(post)}${esc(post.title)}</h2>
       <div class="notice-author"><span class="notice-author-icon">i</span><b>관리자</b><time>${noticeDate(post.createdAt, true)}</time></div>
       <div class="notice-body" style="${noticeContentStyle(post)}">${noticeBodyHtml(post.body)}</div>
     </article>
@@ -2957,6 +2984,8 @@ async function api(req, res, db, user, pathname) {
         displayName: "관리자",
         authorId: user.id,
         pinned: data.pinned === "on" || data.pinned === true,
+        noticeInfo: data.noticeInfo === "on" || data.noticeInfo === true,
+        noticeEvent: data.noticeEvent === "on" || data.noticeEvent === true,
         noticeNo: maxNoticeNo + 1,
         fontFamily: ["default", "malgun", "serif", "mono"].includes(data.fontFamily) ? data.fontFamily : "default",
         fontSize: ["14", "16", "18", "20"].includes(String(data.fontSize)) ? String(data.fontSize) : "16",
@@ -2978,6 +3007,8 @@ async function api(req, res, db, user, pathname) {
       target.title = title;
       target.body = noticeBody;
       target.pinned = data.pinned === "on" || data.pinned === true;
+      target.noticeInfo = data.noticeInfo === "on" || data.noticeInfo === true;
+      target.noticeEvent = data.noticeEvent === "on" || data.noticeEvent === true;
       target.updatedAt = now();
       target.updatedBy = user.id;
       target.createdAt = noticeCreatedAt(data.createdAt);
