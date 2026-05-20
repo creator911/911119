@@ -505,6 +505,7 @@ function applyMarketPanelFilters(panel, next = {}) {
   else url.searchParams.delete("priceTo");
   if (String(keyword || "").trim()) url.searchParams.set("q", String(keyword || "").trim());
   else url.searchParams.delete("q");
+  url.searchParams.delete("page");
   location.href = url.toString();
 }
 

@@ -1377,8 +1377,16 @@ function adminPager(paged, params, pageKey, sizeKey, anchor = "") {
   const next = paged.page < paged.totalPages
     ? `<a href="${adminPageHref(params, { [pageKey]: paged.page + 1 }, anchor)}">다음</a>`
     : `<span>다음</span>`;
+  const maxNumbers = 10;
+  const pageStart = Math.max(1, Math.min(paged.page - Math.floor(maxNumbers / 2), paged.totalPages - maxNumbers + 1));
+  const pageEnd = Math.min(paged.totalPages, pageStart + maxNumbers - 1);
+  const numbers = Array.from({ length: pageEnd - pageStart + 1 }, (_, index) => pageStart + index)
+    .map((page) => page === paged.page
+      ? `<b class="active-page">${page}</b>`
+      : `<a href="${adminPageHref(params, { [pageKey]: page }, anchor)}">${page}</a>`)
+    .join("");
   return `<nav class="admin-pager">
-    <div>${prev}<b>${paged.page} / ${paged.totalPages}</b>${next}<small>총 ${paged.total.toLocaleString()}개</small></div>
+    <div>${prev}<div class="admin-page-numbers">${numbers}</div>${next}<small>총 ${paged.total.toLocaleString()}개</small></div>
     <div class="admin-page-size">
       <a class="${paged.size === 10 ? "active" : ""}" href="${adminPageHref(params, { [pageKey]: 1, [sizeKey]: 10 }, anchor)}">10개</a>
       <a class="${paged.size === 100 ? "active" : ""}" href="${adminPageHref(params, { [pageKey]: 1, [sizeKey]: 100 }, anchor)}">100개</a>
@@ -1891,6 +1899,7 @@ function gameDetailPage(user, db, slug, filters = {}) {
   const priceFrom = Math.max(0, Number(filters.priceFrom || 0));
   const priceTo = Math.max(0, Number(filters.priceTo || 0));
   const keyword = String(filters.keyword || "").trim().toLowerCase();
+  const perPage = 7;
   const posts = allTrades(db).filter((post) => {
     const priceMan = Math.floor(Number(post.price || 0) / 10000);
     const haystack = `${post.title || ""} ${post.descriptionText || ""} ${post.description || ""}`.toLowerCase();
@@ -1902,10 +1911,10 @@ function gameDetailPage(user, db, slug, filters = {}) {
       && (!priceTo || priceMan <= priceTo)
       && (!keyword || haystack.includes(keyword));
   }).sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)));
-  const filterHref = (nextSide, nextKind) => {
+  const baseParams = () => {
     const params = new URLSearchParams();
-    params.set("side", nextSide);
-    params.set("kind", nextKind);
+    params.set("side", side);
+    params.set("kind", kind);
     params.set("server", server);
     if (priceFrom) params.set("priceFrom", String(priceFrom));
     if (priceTo) params.set("priceTo", String(priceTo));
@@ -1913,9 +1922,28 @@ function gameDetailPage(user, db, slug, filters = {}) {
     Object.entries(extraFilters).forEach(([key, value]) => {
       if (value) params.set(key, value);
     });
+    return params;
+  };
+  const filterHref = (nextSide, nextKind) => {
+    const params = baseParams();
+    params.set("side", nextSide);
+    params.set("kind", nextKind);
     return `/games/${encodeURIComponent(game.slug)}?${params.toString()}`;
   };
-  const postCards = posts.map((post) => renderTradeCard(post, db)).join("");
+  const totalPages = Math.max(1, Math.ceil(posts.length / perPage));
+  const requestedPage = Math.max(1, Number.parseInt(filters.page || "1", 10) || 1);
+  const page = Math.min(requestedPage, totalPages);
+  const pageHref = (nextPage) => {
+    const params = baseParams();
+    if (nextPage > 1) params.set("page", String(nextPage));
+    return `/games/${encodeURIComponent(game.slug)}?${params.toString()}`;
+  };
+  const pagedPosts = posts.slice((page - 1) * perPage, page * perPage);
+  const postCards = pagedPosts.map((post) => renderTradeCard(post, db)).join("");
+  const pager = totalPages > 1 ? `<nav class="trade-pager" aria-label="거래글 페이지 이동">
+    ${page > 1 ? `<a href="${pageHref(page - 1)}" aria-label="이전 페이지">이전</a>` : `<span>이전</span>`}
+    ${page < totalPages ? `<a href="${pageHref(page + 1)}" aria-label="다음 페이지">다음</a>` : `<span>다음</span>`}
+  </nav>` : "";
   return layout(game.name, user, `<main class="game-detail-page" ${gameThemeStyle(game)}>
     <section class="game-detail-hero">
       <img src="${gameImage(game)}" alt="">
@@ -1929,6 +1957,7 @@ function gameDetailPage(user, db, slug, filters = {}) {
         ${["all", ...availableKinds].map((item) => `<a class="${kind === item ? "active" : ""}" href="${filterHref(side, item)}">${item === "all" ? "전체유형" : item}</a>`).join("")}
       </div>
       <div class="trade-list">${postCards || "<p class='empty'>아직 등록된 거래글이 없습니다.</p>"}</div>
+      ${pager}
     </section>
     ${chatWidget(user)}
   </main>`, "games");
@@ -3250,7 +3279,7 @@ async function router(req, res) {
     url.searchParams.forEach((value, key) => {
       if (/^f\d+$/.test(key)) panelFilters[key] = value;
     });
-    return send(res, 200, gameDetailPage(user, db, decodeURIComponent(url.pathname.split("/").pop()), { side: url.searchParams.get("side") || "all", kind: url.searchParams.get("kind") || "all", server: url.searchParams.get("server") || "서버전체", filters: panelFilters, priceFrom: url.searchParams.get("priceFrom") || "0", priceTo: url.searchParams.get("priceTo") || "0", keyword: url.searchParams.get("q") || "" }));
+    return send(res, 200, gameDetailPage(user, db, decodeURIComponent(url.pathname.split("/").pop()), { side: url.searchParams.get("side") || "all", kind: url.searchParams.get("kind") || "all", server: url.searchParams.get("server") || "서버전체", filters: panelFilters, priceFrom: url.searchParams.get("priceFrom") || "0", priceTo: url.searchParams.get("priceTo") || "0", keyword: url.searchParams.get("q") || "", page: url.searchParams.get("page") || "1" }));
   }
   if (url.pathname === "/sell") return protect(user, "member") ? send(res, 200, registerPage(user, "sell", db, url.searchParams.get("game") || "")) : redirect(res, "/login");
   if (url.pathname === "/buy") return protect(user, "member") ? send(res, 200, registerPage(user, "buy", db, url.searchParams.get("game") || "")) : redirect(res, "/login");

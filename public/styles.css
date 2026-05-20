@@ -766,6 +766,11 @@ td button { margin-right: 6px; min-height: 34px; }
   min-width: 0;
 }
 
+.admin-pager .admin-page-numbers {
+  gap: 4px;
+  flex-wrap: wrap;
+}
+
 .admin-pager a,
 .admin-pager span,
 .admin-pager b {
@@ -790,6 +795,12 @@ td button { margin-right: 6px; min-height: 34px; }
 
 .admin-pager b {
   color: #0f172a;
+}
+
+.admin-pager b.active-page {
+  border-color: #075bdc;
+  background: #075bdc;
+  color: #fff;
 }
 
 .admin-pager small {
@@ -3123,6 +3134,43 @@ input:focus-visible {
 .trade-list {
   display: grid;
   gap: 10px;
+}
+.trade-pager {
+  display: flex;
+  justify-content: center;
+  gap: 7px;
+  margin-top: 16px;
+  padding-top: 10px;
+  border-top: 1px solid #e3ebf5;
+}
+.trade-pager a,
+.trade-pager span {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 28px;
+  padding: 0 10px;
+  border: 1px solid #d5e4f6;
+  border-radius: 7px;
+  background: #fff;
+  color: #075bdc;
+  font-size: 12px;
+  font-weight: 900;
+  text-decoration: none;
+  transition: border-color .14s ease, box-shadow .14s ease, transform .14s ease;
+}
+.trade-pager a:hover {
+  border-color: #0b63df;
+  box-shadow: 0 8px 18px rgba(11, 99, 223, .12);
+  transform: translateY(-1px);
+}
+.trade-pager .disabled {
+  color: #b9c5d6;
+  background: #f7f9fc;
+}
+.trade-pager span {
+  color: #94a3b8;
+  background: #f8fbff;
 }
 .trade-card {
   position: relative;
