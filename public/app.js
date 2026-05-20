@@ -66,6 +66,11 @@ function showStoredTopMessage(raw) {
 async function loadTopNotifications() {
   if (!document.body.dataset.user) return;
   const res = await fetch("/api/notifications");
+  if (res.status === 401) {
+    document.body.dataset.user = "";
+    location.href = "/";
+    return;
+  }
   if (!res.ok) return;
   const { notifications = [] } = await res.json();
   notifications.forEach((item, index) => {
@@ -112,6 +117,38 @@ function openImagePreview(src, name = "") {
   img.src = src;
   img.alt = name;
   viewer.classList.add("open");
+}
+
+function openAdminIpModal(info = {}) {
+  let modal = $("#adminIpModal");
+  if (!modal) {
+    modal = document.createElement("div");
+    modal.id = "adminIpModal";
+    modal.className = "admin-ip-modal-layer";
+    document.body.appendChild(modal);
+  }
+  const lastIp = info.lastIp || "";
+  const lastAt = info.lastIpAt ? new Date(info.lastIpAt).toLocaleString("ko-KR") : "-";
+  const history = (info.ipHistory || []).map((item) => `<li><b>${escapeHtml(item.ip)}</b><span>${item.at ? new Date(item.at).toLocaleString("ko-KR") : "-"}</span></li>`).join("");
+  modal.innerHTML = `<section class="admin-ip-modal" role="dialog" aria-modal="true" aria-labelledby="adminIpModalTitle">
+    <h2 id="adminIpModalTitle">회원 IP 정보</h2>
+    <dl>
+      <div><dt>회원</dt><dd>${escapeHtml(info.nickname || "-")} (${escapeHtml(info.username || "-")})</dd></div>
+      <div><dt>최근 IP</dt><dd>${lastIp ? escapeHtml(lastIp) : "기록된 IP가 없습니다."}</dd></div>
+      <div><dt>최근 접속</dt><dd>${escapeHtml(lastAt)}</dd></div>
+    </dl>
+    <ul>${history || "<li>IP 기록이 없습니다.</li>"}</ul>
+    <div>
+      <button type="button" data-admin-user-ip-ban="${escapeAttr(info.id || "")}" ${lastIp ? "" : "disabled"}>IP벤</button>
+      <button type="button" data-admin-ip-close>닫기</button>
+    </div>
+  </section>`;
+  modal.hidden = false;
+}
+
+function closeAdminIpModal() {
+  const modal = $("#adminIpModal");
+  if (modal) modal.hidden = true;
 }
 
 function openMemberChat() {
@@ -255,6 +292,46 @@ document.addEventListener("click", async (event) => {
     const data = { id: adminSave.dataset.adminUserSave };
     $$("input, select", row).forEach((input) => { data[input.name] = input.value; });
     await post("/api/admin/user", data);
+    location.reload();
+    return;
+  }
+  const adminUserLogout = event.target.closest("[data-admin-user-logout]");
+  if (adminUserLogout) {
+    event.preventDefault();
+    if (!confirm("해당 회원을 로그아웃시킬까요?")) return;
+    await post("/api/admin/user/logout", { id: adminUserLogout.dataset.adminUserLogout });
+    alert("해당 회원을 로그아웃 처리했습니다.");
+    location.reload();
+    return;
+  }
+  const adminUserIp = event.target.closest("[data-admin-user-ip]");
+  if (adminUserIp) {
+    event.preventDefault();
+    const res = await fetch(`/api/admin/user-ip?id=${encodeURIComponent(adminUserIp.dataset.adminUserIp)}`);
+    const json = await res.json();
+    if (!res.ok) return alert(json.error || "IP 정보를 불러오지 못했습니다.");
+    openAdminIpModal(json);
+    return;
+  }
+  const adminUserIpBan = event.target.closest("[data-admin-user-ip-ban]");
+  if (adminUserIpBan) {
+    event.preventDefault();
+    if (!confirm("이 회원의 최근 IP를 차단할까요?")) return;
+    await post("/api/admin/user-ip/ban", { id: adminUserIpBan.dataset.adminUserIpBan });
+    alert("IP벤 리스트에 추가되었습니다.");
+    closeAdminIpModal();
+    location.reload();
+    return;
+  }
+  if (event.target.closest("[data-admin-ip-close]")) {
+    closeAdminIpModal();
+    return;
+  }
+  const ipBanDelete = event.target.closest("[data-ip-ban-delete]");
+  if (ipBanDelete) {
+    event.preventDefault();
+    if (!confirm("이 IP 밴을 삭제할까요?")) return;
+    await post("/api/admin/ip-ban/delete", { id: ipBanDelete.dataset.ipBanDelete });
     location.reload();
     return;
   }
@@ -1090,6 +1167,10 @@ $$("form[data-form]").forEach((form) => {
       } else if (type === "site") {
         await post("/api/admin/site", data);
         message.textContent = "저장되었습니다.";
+      } else if (type === "ip-ban") {
+        await post("/api/admin/ip-ban", data);
+        message.textContent = "IP가 추가되었습니다.";
+        setTimeout(() => location.reload(), 450);
       } else if (type === "notice" || type === "notice-edit") {
         syncNoticeEditor(form);
         syncNoticeDate(form);

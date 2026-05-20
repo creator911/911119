@@ -896,7 +896,7 @@ td button { margin-right: 6px; min-height: 34px; }
 
 .admin-page .table-panel th:nth-child(2),
 .admin-page .table-panel td:nth-child(2) {
-  width: 10%;
+  width: 6%;
 }
 
 .admin-page .table-panel th:nth-child(3),
@@ -911,7 +911,7 @@ td button { margin-right: 6px; min-height: 34px; }
 
 .admin-page .table-panel th:nth-child(5),
 .admin-page .table-panel td:nth-child(5) {
-  width: 14%;
+  width: 11%;
 }
 
 .admin-page .table-panel th:nth-child(6),
@@ -930,7 +930,7 @@ td button { margin-right: 6px; min-height: 34px; }
 
 .admin-page .table-panel th:nth-child(10),
 .admin-page .table-panel td:nth-child(10) {
-  width: 6%;
+  width: 13%;
 }
 
 .admin-page .admin-edit-field {
@@ -948,6 +948,11 @@ td button { margin-right: 6px; min-height: 34px; }
   line-height: 1.25;
 }
 
+.admin-page .admin-edit-field.is-online span {
+  color: #075bd5;
+  font-weight: 950;
+}
+
 .admin-page .admin-edit-field input,
 .admin-page .admin-edit-field select {
   min-height: 28px;
@@ -962,6 +967,28 @@ td button { margin-right: 6px; min-height: 34px; }
   padding: 0 5px;
   border-radius: 5px;
   font-size: 11px;
+}
+
+.admin-user-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 3px;
+}
+
+.admin-user-actions button {
+  min-height: 24px;
+  padding: 0 5px;
+  border-radius: 5px;
+  background: #eef5ff;
+  color: #075bdc;
+  font-size: 11px;
+  font-weight: 900;
+  white-space: nowrap;
+}
+
+.admin-user-actions .admin-row-save {
+  background: #075bdc;
+  color: #fff;
 }
 
 .admin-page .admin-edit-field[data-admin-field="displayGrade"] span,
@@ -6210,6 +6237,189 @@ input:focus-visible {
 
 .admin-notice-form[hidden] {
   display: none;
+}
+
+.admin-ip-panel {
+  margin-bottom: 18px;
+}
+
+.admin-ip-form {
+  display: grid;
+  grid-template-columns: minmax(130px, 180px) minmax(0, 1fr) 110px;
+  gap: 8px;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.admin-ip-form input {
+  min-height: 38px;
+  padding: 0 12px;
+  border: 1px solid #dbe6f3;
+  border-radius: 8px;
+  background: #fff;
+  font-weight: 800;
+}
+
+.admin-ip-form button {
+  min-height: 38px;
+  border-radius: 8px;
+  background: #075bd5;
+  color: #fff;
+  font-weight: 900;
+}
+
+.admin-ip-form .form-message {
+  grid-column: 1 / -1;
+  margin: 0;
+}
+
+.admin-ip-list {
+  display: grid;
+  gap: 7px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.admin-ip-list li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid #dbe6f3;
+  border-radius: 8px;
+  background: #fbfdff;
+}
+
+.admin-ip-list li div {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.admin-ip-list b {
+  color: #0f172a;
+  font-weight: 950;
+}
+
+.admin-ip-list span,
+.admin-ip-list small {
+  color: #64748b;
+  font-weight: 800;
+}
+
+.admin-ip-list button {
+  min-height: 30px;
+  padding: 0 10px;
+  border-radius: 7px;
+  background: #ef4444;
+  color: #fff;
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.admin-ip-modal-layer {
+  position: fixed;
+  inset: 0;
+  z-index: 1500;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  background: rgba(15, 23, 42, .44);
+}
+
+.admin-ip-modal-layer[hidden] {
+  display: none;
+}
+
+.admin-ip-modal {
+  width: min(440px, calc(100vw - 32px));
+  display: grid;
+  gap: 14px;
+  padding: 24px;
+  border-radius: 14px;
+  background: #fff;
+  box-shadow: 0 24px 70px rgba(15, 23, 42, .24);
+}
+
+.admin-ip-modal h2 {
+  margin: 0;
+  color: #0f172a;
+  font-size: 22px;
+}
+
+.admin-ip-modal dl {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+}
+
+.admin-ip-modal dl div {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding-bottom: 7px;
+  border-bottom: 1px solid #edf2f8;
+}
+
+.admin-ip-modal dt {
+  color: #64748b;
+  font-weight: 900;
+}
+
+.admin-ip-modal dd {
+  margin: 0;
+  color: #0f172a;
+  font-weight: 950;
+  text-align: right;
+}
+
+.admin-ip-modal ul {
+  max-height: 150px;
+  overflow: auto;
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.admin-ip-modal li {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: #f8fbff;
+  color: #64748b;
+  font-weight: 800;
+}
+
+.admin-ip-modal > div {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.admin-ip-modal button {
+  min-height: 44px;
+  border-radius: 9px;
+  background: #075bd5;
+  color: #fff;
+  font-weight: 950;
+}
+
+.admin-ip-modal button:last-child {
+  background: #eef5ff;
+  color: #075bd5;
+}
+
+.admin-ip-modal button:disabled {
+  background: #e5edf7;
+  color: #94a3b8;
+  cursor: not-allowed;
 }
 
 .admin-notice-cancel {

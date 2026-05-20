@@ -1,4 +1,5 @@
 import http from "node:http";
+import { isIP } from "node:net";
 import { readFile, writeFile, mkdir, stat, copyFile, rename, rm, readdir } from "node:fs/promises";
 import { createReadStream, existsSync, readFileSync } from "node:fs";
 import path from "node:path";
@@ -186,6 +187,7 @@ function normalizeDb(db) {
   db.site.banners ||= [{ title: "메인 배너", subtitle: "", badge: "" }];
   db.site.posts ||= [];
   db.site.notices ||= [];
+  db.site.ipBans ||= [];
   db.directChatRooms ||= [];
   db.directChatMessages ||= [];
   db.userNotifications ||= [];
@@ -213,6 +215,10 @@ function normalizeDb(db) {
     }
   });
   (db.users || []).forEach((user) => {
+    user.sessionVersion = Number(user.sessionVersion || 0);
+    user.ipHistory ||= [];
+    if (user.lastIp && !user.lastIpAt) user.lastIpAt = user.updatedAt || user.createdAt || now();
+    if (user.lastIpAt && user.lastSeenAt === undefined) user.lastSeenAt = user.lastIpAt;
     if (user.role === "ADMIN") {
       user.role = "STAFF";
       changed = true;
@@ -446,18 +452,74 @@ function parseCookies(req) {
   }));
 }
 
+function normalizeIp(value = "") {
+  const raw = String(value || "").split(",")[0].trim();
+  if (!raw) return "";
+  return raw.replace(/^::ffff:/, "");
+}
+
+function clientIp(req) {
+  return normalizeIp(req.headers["cf-connecting-ip"] || req.headers["x-forwarded-for"] || req.socket?.remoteAddress || "");
+}
+
+function validIp(value = "") {
+  const ip = normalizeIp(value);
+  return Boolean(ip && isIP(ip));
+}
+
+function isIpBanned(db, ip) {
+  const target = normalizeIp(ip);
+  return Boolean(target && (db.site?.ipBans || []).some((ban) => normalizeIp(ban.ip) === target));
+}
+
+function sendIpBlocked(req, res) {
+  if (req.url.startsWith("/api/")) return send(res, 403, { error: "접속이 제한된 IP입니다." });
+  return send(res, 403, `<!doctype html><html lang="ko"><head><meta charset="utf-8"><title>접속 제한</title><style>body{margin:0;display:grid;place-items:center;min-height:100vh;font-family:Malgun Gothic,Arial,sans-serif;background:#f8fafc;color:#0f172a}.box{padding:36px 42px;border:1px solid #dbe6f3;border-radius:14px;background:#fff;box-shadow:0 20px 50px rgba(15,23,42,.12);text-align:center}h1{margin:0 0 10px;font-size:26px}p{margin:0;color:#64748b;font-weight:800}</style></head><body><section class="box"><h1>접속이 제한되었습니다.</h1><p>관리자에게 문의해 주세요.</p></section></body></html>`);
+}
+
+async function rememberUserIp(db, user, ip) {
+  const cleanIp = normalizeIp(ip);
+  if (!user) return;
+  const lastAt = user.lastIpAt ? new Date(user.lastIpAt).getTime() : 0;
+  const lastSeenAt = user.lastSeenAt ? new Date(user.lastSeenAt).getTime() : 0;
+  const shouldWrite = (cleanIp && user.lastIp !== cleanIp) || Date.now() - lastSeenAt > 30 * 1000;
+  if (!shouldWrite) return;
+  user.lastSeenAt = now();
+  if (cleanIp) {
+    user.lastIp = cleanIp;
+    user.lastIpAt = user.lastSeenAt;
+    user.ipHistory ||= [];
+    user.ipHistory = [
+      { ip: cleanIp, at: user.lastIpAt },
+      ...user.ipHistory.filter((item) => normalizeIp(item.ip) !== cleanIp)
+    ].slice(0, 10);
+  }
+  await writeDb(db);
+}
+
 async function currentUser(req, db) {
   const token = parseCookies(req).session;
   if (!token) return null;
-  const [userId, sig] = token.split(".");
-  const expected = crypto.createHmac("sha256", SESSION_SECRET).update(userId).digest("hex");
+  const parts = token.split(".");
+  const [userId, maybeVersion, maybeSig] = parts;
+  const user = db.users.find((u) => u.id === userId) || null;
+  if (!user) return null;
+  const currentVersion = Number(user.sessionVersion || 0);
+  const version = parts.length >= 3 ? Number(maybeVersion || 0) : 0;
+  const sig = parts.length >= 3 ? maybeSig : maybeVersion;
+  if (version !== currentVersion) return null;
+  const payload = parts.length >= 3 ? `${userId}.${version}` : userId;
+  const expected = crypto.createHmac("sha256", SESSION_SECRET).update(payload).digest("hex");
   if (sig !== expected) return null;
-  return db.users.find((u) => u.id === userId) || null;
+  return user;
 }
 
-function sessionCookie(userId) {
-  const sig = crypto.createHmac("sha256", SESSION_SECRET).update(userId).digest("hex");
-  return `session=${encodeURIComponent(`${userId}.${sig}`)}; HttpOnly; SameSite=Lax; Path=/; Max-Age=604800`;
+function sessionCookie(user) {
+  const userId = typeof user === "string" ? user : user.id;
+  const version = Number(typeof user === "string" ? 0 : user.sessionVersion || 0);
+  const payload = `${userId}.${version}`;
+  const sig = crypto.createHmac("sha256", SESSION_SECRET).update(payload).digest("hex");
+  return `session=${encodeURIComponent(`${payload}.${sig}`)}; HttpOnly; SameSite=Lax; Path=/; Max-Age=604800`;
 }
 
 async function body(req) {
@@ -2154,8 +2216,10 @@ function myPage(user, db) {
 
 function adminPage(user, db, paging = {}) {
   const editCell = (name, value, type = "text") => `<div class="admin-edit-field" data-admin-field="${name}"><span>${esc(value || "-")}</span><input name="${name}" type="${type}" value="${esc(value || "")}" hidden><button type="button" data-admin-edit="${name}">수정</button></div>`;
-  const passwordCell = () => `<div class="admin-edit-field password" data-admin-field="password"><span>변경 전용</span><input name="password" type="password" value="" placeholder="새 비밀번호" hidden><button type="button" data-admin-edit="password">수정</button></div>`;
+  const onlineEditCell = (name, value, online, type = "text") => `<div class="admin-edit-field ${online ? "is-online" : ""}" data-admin-field="${name}"><span>${esc(value || "-")}</span><input name="${name}" type="${type}" value="${esc(value || "")}" hidden><button type="button" data-admin-edit="${name}">수정</button></div>`;
+  const passwordCell = () => `<div class="admin-edit-field password" data-admin-field="password"><span>-</span><input name="password" type="password" value="" placeholder="새 비밀번호" hidden><button type="button" data-admin-edit="password">수정</button></div>`;
   const selectCell = (name, value, options) => `<div class="admin-edit-field" data-admin-field="${name}"><span>${esc(value || "-")}</span><select name="${name}" hidden>${options.map((option) => `<option value="${esc(option)}" ${option === value ? "selected" : ""}>${esc(option)}</option>`).join("")}</select><button type="button" data-admin-edit="${name}">수정</button></div>`;
+  const isOnline = (target) => target.lastSeenAt && Date.now() - new Date(target.lastSeenAt).getTime() < 2 * 60 * 1000;
   const roleOptions = user.role === "OWNER" ? ROLES : ROLES.filter((role) => role !== "OWNER");
   const pageParams = {
     userPage: pageNumber(paging.userPage),
@@ -2168,7 +2232,7 @@ function adminPage(user, db, paging = {}) {
   const pointRequestsPaged = pagedItems((db.pointRequests || []).slice().reverse(), pageParams.pointPage, pageParams.pointSize);
   pageParams.pointPage = pointRequestsPaged.page;
   const users = usersPaged.items.map((u) => `<tr data-admin-user-row="${esc(u.id)}">
-    <td>${editCell("username", u.username)}</td>
+    <td>${onlineEditCell("username", u.username, isOnline(u))}</td>
     <td>${passwordCell()}</td>
     <td>${editCell("nickname", u.nickname)}</td>
     <td>${editCell("phone", u.phone)}</td>
@@ -2177,7 +2241,7 @@ function adminPage(user, db, paging = {}) {
     <td>${selectCell("displayGrade", u.displayGrade, DISPLAY_GRADES)}</td>
     <td>${selectCell("internalGrade", normalizeInternalGrade(u.internalGrade), INTERNAL_GRADES)}</td>
     <td>${editCell("points", Number(u.points || 0), "number")}</td>
-    <td><button type="button" class="admin-row-save" data-admin-user-save="${esc(u.id)}">저장</button></td>
+    <td><div class="admin-user-actions"><button type="button" class="admin-row-save" data-admin-user-save="${esc(u.id)}">저장</button><button type="button" data-admin-user-logout="${esc(u.id)}">로그아웃</button><button type="button" data-admin-user-ip="${esc(u.id)}">IP</button></div></td>
   </tr>`).join("");
   const reqs = pointRequestsPaged.items.map((r) => {
     const member = db.users.find((u) => u.id === r.userId);
@@ -2206,12 +2270,14 @@ function adminPage(user, db, paging = {}) {
   const noticeInputDate = noticeInputDateValue(editNotice?.createdAt);
   const noticeInputDay = noticeInputDate.slice(0, 10);
   const noticeInputTime = noticeInputDate.slice(11, 16);
+  const ipBanRows = (db.site.ipBans || []).slice().reverse().map((ban) => `<li><div><b>${esc(ban.ip)}</b><span>${esc(ban.memo || "-")}</span><small>${noticeDate(ban.createdAt, true)}</small></div><button type="button" data-ip-ban-delete="${esc(ban.id)}">삭제</button></li>`).join("");
   return layout("관리자", user, `<main class="admin-page">
     <h1>운영 관리자</h1>
     <nav class="admin-tools">
       <button type="button" data-admin-panel-toggle="account">계좌번호등록</button>
       <button type="button" data-admin-panel-toggle="staff">운영진계정생성</button>
       <button type="button" data-admin-panel-toggle="notice" ${editingNotice ? "class=\"active\"" : ""}>공지사항관리</button>
+      <button type="button" data-admin-panel-toggle="ip">IP관리</button>
       <a href="/admin_write">글 작성(관리자권한)</a>
     </nav>
     <section class="admin-grid">
@@ -2225,6 +2291,16 @@ function adminPage(user, db, paging = {}) {
         <input name="username" placeholder="아이디"><input name="password" type="password" placeholder="비밀번호"><input name="nickname" placeholder="닉네임">
         <select name="role"><option>STAFF</option></select><button>생성</button><p class="form-message"></p>
       </form>
+    </section>
+    <section class="panel admin-ip-panel admin-collapsible-panel" data-admin-panel="ip" hidden>
+      <div class="admin-notice-head"><h2>IP관리</h2></div>
+      <form class="admin-ip-form" data-form="ip-ban">
+        <input name="ip" placeholder="차단할 IP">
+        <input name="memo" placeholder="메모">
+        <button>IP 추가</button>
+        <p class="form-message"></p>
+      </form>
+      <ul class="admin-ip-list">${ipBanRows || "<li class='empty-row'>등록된 IP 밴이 없습니다.</li>"}</ul>
     </section>
     <section class="panel admin-notice-panel admin-collapsible-panel" data-admin-panel="notice" ${editingNotice ? "" : "hidden"}>
       <div class="admin-notice-head"><h2>${editingNotice ? "공지사항 수정" : "공지사항 관리"}</h2></div>
@@ -2409,18 +2485,31 @@ async function api(req, res, db, user, pathname) {
       if (password !== passwordConfirm) return send(res, 400, { error: "패스워드 재확인이 일치하지 않습니다." });
       if (db.users.some((u) => String(u.username || "").toLowerCase() === username.toLowerCase())) return send(res, 409, { error: "이미 사용 중인 아이디입니다." });
       if (db.users.some((u) => String(u.nickname || "").toLowerCase() === nickname.toLowerCase())) return send(res, 409, { error: "이미 사용 중인 닉네임입니다." });
-      const newUser = { id: id("user"), username, passwordHash: await hashPassword(password), nickname, name: realName, phone, phoneCarrier: data.phoneCarrier, bank: "-", accountNumber: "-", displayGrade: "브론즈", internalGrade: "1급", role: "MEMBER", status: "정상", points: 0, createdAt: now() };
+      const newUser = { id: id("user"), username, passwordHash: await hashPassword(password), nickname, name: realName, phone, phoneCarrier: data.phoneCarrier, bank: "-", accountNumber: "-", displayGrade: "브론즈", internalGrade: "1급", role: "MEMBER", status: "정상", points: 0, sessionVersion: 0, ipHistory: [], createdAt: now() };
       db.users.push(newUser); await writeDb(db);
-      return send(res, 200, { ok: true }, { "Set-Cookie": sessionCookie(newUser.id) });
+      return send(res, 200, { ok: true }, { "Set-Cookie": sessionCookie(newUser) });
     }
     if (pathname === "/api/login" && req.method === "POST") {
       const data = await body(req);
       const found = db.users.find((u) => u.username === data.username);
       if (!found || !(await verifyPassword(data.password, found.passwordHash))) return send(res, 401, { error: "아이디 또는 비밀번호가 올바르지 않습니다." });
-      return send(res, 200, { ok: true }, { "Set-Cookie": sessionCookie(found.id) });
+      return send(res, 200, { ok: true }, { "Set-Cookie": sessionCookie(found) });
     }
     if (pathname === "/api/logout" && req.method === "POST") return send(res, 200, { ok: true }, { "Set-Cookie": "session=; Path=/; Max-Age=0" });
     if (pathname === "/api/me") return send(res, 200, { user: user && publicUser(user) });
+    if (pathname === "/api/admin/user-ip" && req.method === "GET") {
+      if (!protect(user, "admin")) return send(res, 403, { error: "권한이 없습니다." });
+      const target = db.users.find((item) => item.id === requestUrl.searchParams.get("id"));
+      if (!target) return send(res, 404, { error: "회원을 찾을 수 없습니다." });
+      return send(res, 200, {
+        id: target.id,
+        username: target.username,
+        nickname: target.nickname,
+        lastIp: target.lastIp || "",
+        lastIpAt: target.lastIpAt || "",
+        ipHistory: (target.ipHistory || []).slice(0, 10)
+      });
+    }
     if (pathname === "/api/admin/trade" && req.method === "POST") {
       if (!protect(user, "admin")) return send(res, 403, { error: "권한이 없습니다." });
       const data = await body(req);
@@ -2684,10 +2773,59 @@ async function api(req, res, db, user, pathname) {
       await writeDb(db);
       return send(res, 200, { ok: true });
     }
+    if (pathname === "/api/admin/ip-ban" && req.method === "POST") {
+      if (!protect(user, "admin")) return send(res, 403, { error: "권한이 없습니다." });
+      const data = await body(req);
+      const ip = normalizeIp(data.ip);
+      if (!validIp(ip)) return send(res, 400, { error: "IP 형식을 확인하세요." });
+      db.site.ipBans ||= [];
+      if (db.site.ipBans.some((ban) => normalizeIp(ban.ip) === ip)) return send(res, 409, { error: "이미 등록된 IP입니다." });
+      db.site.ipBans.push({ id: id("ipban"), ip, memo: String(data.memo || "").trim(), createdAt: now(), createdBy: user.id });
+      audit(db, user, "IP_BAN_CREATE", ip);
+      await writeDb(db);
+      return send(res, 200, { ok: true });
+    }
+    if (pathname === "/api/admin/ip-ban/delete" && req.method === "POST") {
+      if (!protect(user, "admin")) return send(res, 403, { error: "권한이 없습니다." });
+      const data = await body(req);
+      const before = db.site.ipBans?.length || 0;
+      db.site.ipBans = (db.site.ipBans || []).filter((ban) => ban.id !== data.id);
+      if (db.site.ipBans.length === before) return send(res, 404, { error: "IP 밴을 찾을 수 없습니다." });
+      audit(db, user, "IP_BAN_DELETE", data.id);
+      await writeDb(db);
+      return send(res, 200, { ok: true });
+    }
+    if (pathname === "/api/admin/user-ip/ban" && req.method === "POST") {
+      if (!protect(user, "admin")) return send(res, 403, { error: "권한이 없습니다." });
+      const data = await body(req);
+      const target = db.users.find((item) => item.id === data.id);
+      if (!target) return send(res, 404, { error: "회원을 찾을 수 없습니다." });
+      const ip = normalizeIp(target.lastIp);
+      if (!validIp(ip)) return send(res, 400, { error: "기록된 IP가 없습니다." });
+      db.site.ipBans ||= [];
+      if (!db.site.ipBans.some((ban) => normalizeIp(ban.ip) === ip)) {
+        db.site.ipBans.push({ id: id("ipban"), ip, memo: `${target.nickname || target.username} 회원 IP`, createdAt: now(), createdBy: user.id });
+      }
+      audit(db, user, "USER_IP_BAN", `${target.id}:${ip}`);
+      await writeDb(db);
+      return send(res, 200, { ok: true, ip });
+    }
+    if (pathname === "/api/admin/user/logout" && req.method === "POST") {
+      if (!protect(user, "admin")) return send(res, 403, { error: "권한이 없습니다." });
+      const data = await body(req);
+      const target = db.users.find((item) => item.id === data.id);
+      if (!target) return send(res, 404, { error: "회원을 찾을 수 없습니다." });
+      target.sessionVersion = Number(target.sessionVersion || 0) + 1;
+      target.sessionRevokedAt = now();
+      target.lastSeenAt = "1970-01-01T00:00:00.000Z";
+      audit(db, user, "USER_FORCE_LOGOUT", target.id);
+      await writeDb(db);
+      return send(res, 200, { ok: true });
+    }
     if (pathname === "/api/admin/staff" && req.method === "POST") {
       if (user?.role !== "OWNER") return send(res, 403, { error: "챌린저 계정만 운영진을 생성할 수 있습니다." });
       const data = await body(req);
-      db.users.push({ id: id("user"), username: data.username, passwordHash: await hashPassword(data.password), nickname: data.nickname, name: "", phone: "-", bank: "-", accountNumber: "-", displayGrade: "마스터", internalGrade: "1급", role: ROLES.includes(data.role) ? data.role : "STAFF", status: "정상", points: 0, createdAt: now() });
+      db.users.push({ id: id("user"), username: data.username, passwordHash: await hashPassword(data.password), nickname: data.nickname, name: "", phone: "-", bank: "-", accountNumber: "-", displayGrade: "마스터", internalGrade: "1급", role: ROLES.includes(data.role) ? data.role : "STAFF", status: "정상", points: 0, sessionVersion: 0, ipHistory: [], createdAt: now() });
       audit(db, user, "STAFF_CREATE"); await writeDb(db); return send(res, 200, { ok: true });
     }
     if (pathname === "/api/admin/user" && req.method === "POST") {
@@ -2787,7 +2925,7 @@ async function api(req, res, db, user, pathname) {
       audit(db, user, "POINT_HANDLE", request.id); await writeDb(db); return send(res, 200, { ok: true });
     }
     if (pathname === "/api/notifications" && req.method === "GET") {
-      if (!protect(user, "member")) return send(res, 401, { error: "로그인이 필요합니다." });
+      if (!protect(user, "member")) return send(res, 401, { error: "로그인이 만료되었습니다.", forceReload: true }, { "Set-Cookie": "session=; Path=/; Max-Age=0" });
       db.userNotifications ||= [];
       const notifications = db.userNotifications.filter((item) => item.userId === user.id);
       if (notifications.length) {
@@ -3086,9 +3224,16 @@ async function serveStatic(req, res, pathname) {
 
 async function router(req, res) {
   const url = new URL(req.url, `http://${req.headers.host}`);
-  if (await serveStatic(req, res, url.pathname)) return;
   const db = await readDb();
+  const requestIp = clientIp(req);
+  if (isIpBanned(db, requestIp)) return sendIpBlocked(req, res);
+  if (await serveStatic(req, res, url.pathname)) return;
+  const hadSessionCookie = Boolean(parseCookies(req).session);
   const user = await currentUser(req, db);
+  if (hadSessionCookie && !user && !url.pathname.startsWith("/api/") && !["/", "/login", "/signup"].includes(url.pathname)) {
+    return redirect(res, "/", { "Set-Cookie": "session=; Path=/; Max-Age=0" });
+  }
+  await rememberUserIp(db, user, requestIp);
   if (url.pathname.startsWith("/api/")) return api(req, res, db, user, url.pathname);
   if (url.pathname === "/") return send(res, 200, homePage(user, db));
   if (url.pathname === "/login") return send(res, 200, authPage(user, "login"));
@@ -3132,8 +3277,8 @@ async function router(req, res) {
   send(res, 404, layout("404", user, "<main class='panel'><h1>페이지를 찾을 수 없습니다.</h1></main>"));
 }
 
-function redirect(res, location) {
-  res.writeHead(302, { Location: location });
+function redirect(res, location, headers = {}) {
+  res.writeHead(302, { Location: location, ...headers });
   res.end();
 }
 
