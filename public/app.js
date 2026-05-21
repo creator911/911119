@@ -946,7 +946,7 @@ document.addEventListener("keydown", (event) => {
 });
 
 const signupAvailability = new Map();
-const passwordPattern = /^(?=.*[a-z])(?=.*\d)[a-z\d]{8,}$/;
+const passwordPattern = /^(?=.*[a-z])(?=.*\d).{8,}$/;
 
 function setAvailability(form, field, state, text) {
   const target = $(`[data-availability="${field}"]`, form);
@@ -983,7 +983,7 @@ function updateSignupPasswordState(form) {
   }
   if (!passwordPattern.test(password)) {
     guide.className = "desc bad";
-    guide.textContent = "8자 이상, 영문 소문자와 숫자를 조합해주세요.";
+    guide.textContent = "8자 이상, 영문 소문자와 숫자를 반드시 포함해주세요.";
     return false;
   }
   if (password !== passwordConfirm) {

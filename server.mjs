@@ -2020,7 +2020,7 @@ function authPage(user, mode) {
         <div class="input-wrap">
           <div class="title">패스워드</div>
           <input name="password" type="password" autocomplete="new-password" required>
-          <div class="desc">8자 이상, 영문 소문자와 숫자를 반드시 조합해주세요.</div>
+          <div class="desc">8자 이상, 영문 소문자와 숫자를 반드시 포함해주세요.</div>
         </div>
         <div class="input-wrap">
           <div class="title">패스워드 재확인</div>
@@ -2730,7 +2730,7 @@ async function api(req, res, db, user, pathname) {
       const phoneLast = String(data.phoneLast || "").replace(/\D/g, "");
       const phone = `010-${phoneMid}-${phoneLast}`;
       if (!username || !nickname || !realName || !password || !data.phoneCarrier || phoneMid.length !== 4 || phoneLast.length !== 4) return send(res, 400, { error: "입력값을 확인하세요." });
-      if (!/^(?=.*[a-z])(?=.*\d)[a-z\d]{8,}$/.test(password)) return send(res, 400, { error: "비밀번호는 8자 이상 영문 소문자와 숫자를 조합해주세요." });
+      if (!/^(?=.*[a-z])(?=.*\d).{8,}$/.test(password)) return send(res, 400, { error: "비밀번호는 8자 이상, 영문 소문자와 숫자를 반드시 포함해주세요." });
       if (password !== passwordConfirm) return send(res, 400, { error: "패스워드 재확인이 일치하지 않습니다." });
       if (db.users.some((u) => String(u.username || "").toLowerCase() === username.toLowerCase())) return send(res, 409, { error: "이미 사용 중인 아이디입니다." });
       if (db.users.some((u) => String(u.nickname || "").toLowerCase() === nickname.toLowerCase())) return send(res, 409, { error: "이미 사용 중인 닉네임입니다." });
@@ -3096,7 +3096,6 @@ async function api(req, res, db, user, pathname) {
       target.name = String(data.name || "").trim();
       const nextPassword = String(data.password || "").trim();
       if (nextPassword) {
-        if (!/^(?=.*[a-z])(?=.*\d)[a-z\d]{8,}$/.test(nextPassword)) return send(res, 400, { error: "비밀번호는 8자 이상, 영문 소문자와 숫자를 조합해주세요." });
         target.passwordHash = await hashPassword(nextPassword);
       }
       target.phone = String(data.phone || "").trim();
