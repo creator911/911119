@@ -1,0 +1,1901 @@
+/*
+  Mobile preview-only stylesheet.
+  Loaded only when ITEMZONE_MOBILE_PREVIEW=true.
+  Keep production PC styles in public/styles.css untouched until approval.
+*/
+
+body.mobile-preview::before {
+  content: "MOBILE PREVIEW";
+  position: fixed;
+  left: 10px;
+  bottom: 82px;
+  z-index: 9999;
+  padding: 5px 8px;
+  border-radius: 999px;
+  background: rgba(15, 23, 42, .72);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 900;
+  letter-spacing: 0;
+  pointer-events: none;
+}
+
+@media (max-width: 900px) {
+  body.mobile-preview {
+    min-width: 0;
+    padding-bottom: calc(82px + env(safe-area-inset-bottom));
+    background: #fff;
+    overflow-x: hidden;
+  }
+
+  body.mobile-preview main,
+  body.mobile-preview .hero-wrap,
+  body.mobile-preview .dashboard,
+  body.mobile-preview .content-grid,
+  body.mobile-preview .section-inner,
+  body.mobile-preview .games-page,
+  body.mobile-preview .game-detail-page,
+  body.mobile-preview .trade-compose-page,
+  body.mobile-preview .trade-detail-page,
+  body.mobile-preview .mypage-page,
+  body.mobile-preview .mileage-page,
+  body.mobile-preview .notice-page,
+  body.mobile-preview .auth-page,
+  body.mobile-preview .support-page {
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+  }
+
+  body.mobile-preview .topbar {
+    position: sticky;
+    top: 0;
+    z-index: 80;
+    border-bottom: 0;
+    box-shadow: 0 8px 24px rgba(15, 23, 42, .08);
+  }
+
+  body.mobile-preview .top-inner {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 9px;
+    padding: 10px 12px 9px;
+  }
+
+  body.mobile-preview .brand {
+    width: 180px;
+    margin: 0;
+  }
+
+  body.mobile-preview .brand img {
+    width: 180px;
+    max-width: 58vw;
+  }
+
+  body.mobile-preview .account {
+    order: 2;
+    justify-content: flex-start;
+    gap: 8px;
+    max-width: 100%;
+    padding-bottom: 1px;
+    overflow-x: auto;
+    scrollbar-width: none;
+    font-size: 12px;
+  }
+
+  body.mobile-preview .account::-webkit-scrollbar {
+    display: none;
+  }
+
+  body.mobile-preview .account b,
+  body.mobile-preview .account span,
+  body.mobile-preview .account a,
+  body.mobile-preview .account button {
+    min-height: 30px;
+    padding: 0 6px;
+    border-radius: 999px;
+    background: #f6f8fb;
+    font-size: 12px;
+    font-weight: 900;
+  }
+
+  body.mobile-preview .account-image-link {
+    padding: 0;
+    background: transparent;
+  }
+
+  body.mobile-preview .account-image-link img {
+    height: 42px;
+  }
+
+  body.mobile-preview .search {
+    order: 3;
+    width: 100%;
+    min-height: 44px;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 34px;
+    gap: 8px;
+    padding: 5px 7px 5px 13px;
+    border: 2px solid #111827;
+    border-radius: 18px;
+  }
+
+  body.mobile-preview .search:focus-within,
+  body.mobile-preview .search:hover {
+    border-color: var(--blue);
+  }
+
+  body.mobile-preview .search-field,
+  body.mobile-preview .search-field input,
+  body.mobile-preview .search input:not([type]),
+  body.mobile-preview .search input[type="text"] {
+    min-width: 0;
+    width: 100%;
+  }
+
+  body.mobile-preview .search-field input {
+    font-size: 14px;
+    text-overflow: ellipsis;
+  }
+
+  body.mobile-preview .search .search-icon {
+    width: 34px;
+    height: 34px;
+    min-width: 34px;
+    max-width: 34px;
+    min-height: 34px;
+    max-height: 34px;
+    justify-self: end;
+  }
+
+  body.mobile-preview .main-menu {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 120;
+    height: calc(72px + env(safe-area-inset-bottom));
+    display: grid;
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    gap: 4px;
+    margin: 0;
+    padding: 7px 7px calc(7px + env(safe-area-inset-bottom));
+    border-top: 1px solid #dfe6f2;
+    background: rgba(255, 255, 255, .96);
+    box-shadow: 0 -10px 30px rgba(15, 23, 42, .12);
+    backdrop-filter: blur(10px);
+  }
+
+  body.mobile-preview .main-menu .nav-link {
+    min-width: 0;
+    min-height: 54px;
+    height: 54px;
+    display: grid;
+    place-items: center;
+    margin: 0;
+    padding: 0 2px;
+    border-radius: 12px;
+    background: #f3f7fc;
+    color: #172033;
+    font-size: 0;
+    font-weight: 950;
+    line-height: 1;
+    box-shadow: none;
+  }
+
+  body.mobile-preview .main-menu .nav-link::before,
+  body.mobile-preview .main-menu .nav-link::after {
+    display: none;
+  }
+
+  body.mobile-preview .main-menu .nav-link[data-nav="games"],
+  body.mobile-preview .main-menu .nav-link[data-nav="support"] {
+    display: none;
+  }
+
+  body.mobile-preview .main-menu .nav-link[data-nav="sell"]::after { content: "판매등록"; }
+  body.mobile-preview .main-menu .nav-link[data-nav="buy"]::after { content: "구매등록"; }
+  body.mobile-preview .main-menu .nav-link[data-nav="mypage"]::after { content: "마이"; }
+  body.mobile-preview .main-menu .nav-link[data-nav="charge"]::after { content: "충전"; }
+  body.mobile-preview .main-menu .nav-link[data-nav="withdraw"]::after { content: "출금"; }
+
+  body.mobile-preview .main-menu .nav-link[data-nav]::after {
+    display: block;
+    margin: 0;
+    color: inherit;
+    font-size: 12px;
+    letter-spacing: 0;
+  }
+
+  body.mobile-preview .main-menu .nav-link[data-nav="sell"],
+  body.mobile-preview .main-menu .nav-link[data-nav="buy"] {
+    color: #075bd5;
+    background: #eef6ff;
+  }
+
+  body.mobile-preview .main-menu .nav-link[data-nav="buy"],
+  body.mobile-preview .main-menu .nav-link[data-nav="withdraw"] {
+    color: #149447;
+    background: #effaf4;
+  }
+
+  body.mobile-preview .main-menu .nav-link:hover,
+  body.mobile-preview .main-menu .nav-link:focus-visible {
+    transform: translateY(-2px);
+    outline: none;
+    box-shadow: 0 9px 18px rgba(8, 103, 219, .14);
+  }
+
+  body.mobile-preview .hero-wrap,
+  body.mobile-preview .dashboard,
+  body.mobile-preview .content-grid {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 12px;
+    margin: 12px 10px;
+  }
+
+  body.mobile-preview .hero-banner {
+    min-height: 148px;
+    border-radius: 10px;
+    overflow: hidden;
+  }
+
+  body.mobile-preview .rank-panel,
+  body.mobile-preview .home-login,
+  body.mobile-preview .notice-card,
+  body.mobile-preview .ad-placeholder,
+  body.mobile-preview .right-rail,
+  body.mobile-preview .mypage-summary-card,
+  body.mobile-preview .mypage-simple-panel,
+  body.mobile-preview .mypage-simple-history,
+  body.mobile-preview .mileage-info-panel,
+  body.mobile-preview .mileage-request-panel,
+  body.mobile-preview .trade-board,
+  body.mobile-preview .trade-detail-card,
+  body.mobile-preview .trade-compose,
+  body.mobile-preview .auth-form,
+  body.mobile-preview .register-container,
+  body.mobile-preview .panel {
+    border-radius: 12px;
+    box-shadow: 0 10px 24px rgba(15, 23, 42, .07);
+  }
+
+  body.mobile-preview .rank-panel,
+  body.mobile-preview .notice-card,
+  body.mobile-preview .home-login,
+  body.mobile-preview .ad-placeholder {
+    padding: 16px;
+  }
+
+  body.mobile-preview .rank-panel li {
+    grid-template-columns: 30px 30px minmax(0, 1fr) 38px;
+    min-height: 40px;
+  }
+
+  body.mobile-preview .quick-grid {
+    grid-template-columns: 1fr;
+  }
+
+  body.mobile-preview .quick-grid > .quick-actions {
+    width: 100%;
+    max-width: 390px;
+  }
+
+  body.mobile-preview .games-page,
+  body.mobile-preview .game-detail-page,
+  body.mobile-preview .trade-compose-page,
+  body.mobile-preview .trade-detail-page,
+  body.mobile-preview .mypage-page,
+  body.mobile-preview .mileage-page,
+  body.mobile-preview .notice-page,
+  body.mobile-preview .auth-page {
+    margin: 12px auto 0;
+    padding: 0 10px;
+  }
+
+  body.mobile-preview .game-detail-hero,
+  body.mobile-preview .trade-compose__hero {
+    display: grid;
+    grid-template-columns: 64px minmax(0, 1fr);
+    gap: 12px;
+    align-items: center;
+    min-height: 0;
+    padding: 16px;
+    border-radius: 12px;
+  }
+
+  body.mobile-preview .game-detail-hero > img,
+  body.mobile-preview .trade-compose__hero img {
+    width: 64px;
+    height: 64px;
+    border-radius: 12px;
+  }
+
+  body.mobile-preview .game-detail-hero h1,
+  body.mobile-preview .trade-compose__hero h1 {
+    font-size: 25px;
+    line-height: 1.1;
+  }
+
+  body.mobile-preview .game-detail-hero nav,
+  body.mobile-preview .trade-compose__hero a {
+    grid-column: 1 / -1;
+    width: 100%;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+    margin: 4px 0 0;
+  }
+
+  body.mobile-preview .game-detail-hero nav a,
+  body.mobile-preview .trade-compose__hero a {
+    min-height: 44px;
+  }
+
+  body.mobile-preview .trade-filter,
+  body.mobile-preview .trade-board {
+    overflow: hidden;
+  }
+
+  body.mobile-preview .trade-filter > div,
+  body.mobile-preview .chip-grid,
+  body.mobile-preview .segmented {
+    display: flex;
+    gap: 7px;
+    overflow-x: auto;
+    padding-bottom: 2px;
+    scrollbar-width: none;
+  }
+
+  body.mobile-preview .trade-filter > div::-webkit-scrollbar,
+  body.mobile-preview .chip-grid::-webkit-scrollbar,
+  body.mobile-preview .segmented::-webkit-scrollbar {
+    display: none;
+  }
+
+  body.mobile-preview .trade-filter button,
+  body.mobile-preview .chip-grid span,
+  body.mobile-preview .segmented span {
+    min-height: 40px;
+    flex: 0 0 auto;
+    white-space: nowrap;
+  }
+
+  body.mobile-preview .trade-card {
+    grid-template-columns: 34px minmax(0, 1fr);
+    gap: 10px;
+    padding: 13px 12px;
+  }
+
+  body.mobile-preview .trade-card__grade {
+    width: 30px;
+    height: 30px;
+    grid-row: 1 / span 2;
+  }
+
+  body.mobile-preview .trade-card__main {
+    min-width: 0;
+  }
+
+  body.mobile-preview .trade-card__meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 5px;
+  }
+
+  body.mobile-preview .trade-card h3 {
+    margin-top: 6px;
+    font-size: 16px;
+    line-height: 1.35;
+  }
+
+  body.mobile-preview .trade-card small {
+    font-size: 12px;
+  }
+
+  body.mobile-preview .trade-card__side {
+    grid-column: 2;
+    align-items: start;
+    text-align: left;
+  }
+
+  body.mobile-preview .trade-card__side p,
+  body.mobile-preview .trade-card__side span {
+    font-size: 12px;
+  }
+
+  body.mobile-preview .trade-card strong {
+    font-size: 19px;
+  }
+
+  body.mobile-preview .trade-compose__body,
+  body.mobile-preview .compose-field,
+  body.mobile-preview .admin-write-grid {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 10px;
+  }
+
+  body.mobile-preview .compose-field {
+    padding: 14px;
+  }
+
+  body.mobile-preview .compose-field b {
+    margin: 0 0 2px;
+  }
+
+  body.mobile-preview .compose-field input,
+  body.mobile-preview .compose-field select,
+  body.mobile-preview .compose-field textarea {
+    min-height: 44px;
+  }
+
+  body.mobile-preview .trade-game-current,
+  body.mobile-preview .trade-game-search,
+  body.mobile-preview .quantity-stack,
+  body.mobile-preview .price-entry {
+    grid-template-columns: 1fr;
+  }
+
+  body.mobile-preview .notice-editor-toolbar,
+  body.mobile-preview .trade-editor-toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    padding: 8px;
+  }
+
+  body.mobile-preview .notice-editor-toolbar select,
+  body.mobile-preview .trade-editor-toolbar select,
+  body.mobile-preview .trade-tool-icon,
+  body.mobile-preview .trade-editor-apply,
+  body.mobile-preview .trade-editor-photo {
+    min-height: 38px;
+    flex: 1 1 auto;
+  }
+
+  body.mobile-preview .trade-rich-editor,
+  body.mobile-preview .notice-rich-editor {
+    min-height: 260px;
+  }
+
+  body.mobile-preview .trade-compose__actions {
+    position: sticky;
+    bottom: 76px;
+    z-index: 30;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+    padding: 10px;
+    margin: 0 -10px;
+    background: rgba(255, 255, 255, .96);
+    box-shadow: 0 -8px 22px rgba(15, 23, 42, .08);
+  }
+
+  body.mobile-preview .trade-detail-page {
+    padding-bottom: 92px;
+  }
+
+  body.mobile-preview .trade-detail-layout,
+  body.mobile-preview .trade-detail-card {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+
+  body.mobile-preview .trade-detail-head h1 {
+    font-size: 22px;
+    line-height: 1.25;
+  }
+
+  body.mobile-preview .trade-detail-info-grid,
+  body.mobile-preview .trade-detail-stats {
+    grid-template-columns: 1fr;
+  }
+
+  body.mobile-preview .trade-detail-action {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: calc(72px + env(safe-area-inset-bottom));
+    z-index: 90;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+    padding: 9px 10px;
+    border-top: 1px solid #dfe6f2;
+    background: rgba(255, 255, 255, .97);
+    box-shadow: 0 -10px 24px rgba(15, 23, 42, .12);
+  }
+
+  body.mobile-preview .trade-detail-action > * {
+    width: 100%;
+    min-height: 46px;
+  }
+
+  body.mobile-preview .mypage-page {
+    display: grid;
+    gap: 12px;
+  }
+
+  body.mobile-preview .mypage-summary-card,
+  body.mobile-preview .mypage-trade-panels {
+    grid-template-columns: 1fr;
+  }
+
+  body.mobile-preview .mypage-summary-user img {
+    width: 58px;
+    height: 58px;
+  }
+
+  body.mobile-preview .mypage-summary-user strong,
+  body.mobile-preview .mypage-summary-mileage h2,
+  body.mobile-preview .mypage-simple-panel h2,
+  body.mobile-preview .mypage-simple-history h2 {
+    font-size: 22px;
+  }
+
+  body.mobile-preview .mypage-simple-history li,
+  body.mobile-preview .mileage-page-history li {
+    grid-template-columns: 1fr;
+    gap: 7px;
+    padding: 14px 0;
+  }
+
+  body.mobile-preview .mileage-page-history li > span {
+    padding-left: 0;
+  }
+
+  body.mobile-preview .mileage-page {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 12px;
+    margin: 12px auto 0;
+  }
+
+  body.mobile-preview .mileage-info-panel,
+  body.mobile-preview .mileage-request-panel {
+    align-self: stretch;
+    padding: 18px 14px;
+  }
+
+  body.mobile-preview .mileage-info-panel h1,
+  body.mobile-preview .mileage-form h3,
+  body.mobile-preview .mileage-form h2 {
+    margin-bottom: 12px;
+    font-size: 23px;
+  }
+
+  body.mobile-preview .mileage-feature-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 8px;
+    margin: 14px 0 18px;
+  }
+
+  body.mobile-preview .mileage-feature-grid article,
+  body.mobile-preview .mileage-feature-grid article:nth-child(2),
+  body.mobile-preview .mileage-feature-grid article:nth-child(3) {
+    min-height: 118px;
+    margin-top: 0;
+    padding: 10px 6px;
+    gap: 5px;
+  }
+
+  body.mobile-preview .mileage-feature-grid i {
+    width: 42px;
+    height: 42px;
+    font-size: 20px;
+  }
+
+  body.mobile-preview .mileage-feature-grid span {
+    font-size: 12px;
+    line-height: 1.25;
+  }
+
+  body.mobile-preview .mileage-feature-grid b {
+    font-size: 15px;
+    line-height: 1.25;
+    word-break: keep-all;
+  }
+
+  body.mobile-preview .mileage-guide,
+  body.mobile-preview .charge-page .mileage-guide,
+  body.mobile-preview .withdraw-page .mileage-guide {
+    margin-top: 18px;
+  }
+
+  body.mobile-preview .mileage-guide li {
+    margin-bottom: 9px;
+    padding-left: 16px;
+    font-size: 14px;
+    line-height: 1.45;
+  }
+
+  body.mobile-preview .mileage-form {
+    gap: 12px;
+  }
+
+  body.mobile-preview .mileage-form input {
+    min-height: 50px;
+    font-size: 20px;
+  }
+
+  body.mobile-preview .amount-presets {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 7px;
+  }
+
+  body.mobile-preview .amount-presets button,
+  body.mobile-preview .mileage-submit {
+    min-height: 46px;
+  }
+
+  body.mobile-preview .mileage-summary {
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 10px 8px;
+  }
+
+  body.mobile-preview .mileage-summary dt,
+  body.mobile-preview .mileage-summary dd {
+    font-size: 14px;
+  }
+
+  body.mobile-preview .mileage-summary dd:last-of-type {
+    font-size: 25px;
+  }
+
+  body.mobile-preview .mileage-page-history {
+    padding: 18px 14px;
+  }
+
+  body.mobile-preview .charge-account-check {
+    padding: 18px 12px;
+    overflow: hidden;
+  }
+
+  body.mobile-preview .charge-account-check table {
+    min-width: 0;
+    table-layout: fixed;
+  }
+
+  body.mobile-preview .charge-account-check th,
+  body.mobile-preview .charge-account-check td {
+    padding: 9px 6px;
+    font-size: 12px;
+    word-break: break-all;
+  }
+
+  body.mobile-preview .auth-page,
+  body.mobile-preview .register-container,
+  body.mobile-preview .register-form,
+  body.mobile-preview .auth-form {
+    max-width: 100%;
+  }
+
+  body.mobile-preview .register-form {
+    display: grid;
+    gap: 10px;
+  }
+
+  body.mobile-preview .phone-row,
+  body.mobile-preview .register-row {
+    grid-template-columns: 1fr;
+  }
+
+  body.mobile-preview .chat-fab,
+  body.mobile-preview .direct-chat-fab {
+    width: 58px;
+    height: 58px;
+    bottom: calc(84px + env(safe-area-inset-bottom));
+    z-index: 160;
+  }
+
+  body.mobile-preview .chat-fab {
+    right: 14px;
+  }
+
+  body.mobile-preview .direct-chat-fab {
+    right: 82px;
+  }
+
+  body.mobile-preview .chat-fab.is-open,
+  body.mobile-preview .direct-chat-fab.is-open {
+    display: none;
+  }
+
+  body.mobile-preview .chat-widget,
+  body.mobile-preview .direct-chat-widget {
+    left: 0;
+    right: 0;
+    top: 0;
+    bottom: auto;
+    z-index: 1000;
+    width: 100vw;
+    max-width: 100vw;
+    height: 100dvh;
+    max-height: 100dvh;
+    border: 0;
+    border-radius: 0;
+    transform-origin: center;
+  }
+
+  body.mobile-preview .chat-widget.open,
+  body.mobile-preview .direct-chat-widget.open {
+    display: grid;
+    grid-template-rows: auto minmax(0, 1fr) auto;
+  }
+
+  body.mobile-preview .chat-widget .member-chat-head,
+  body.mobile-preview .direct-chat-head {
+    min-height: 64px;
+    padding: calc(8px + env(safe-area-inset-top)) 12px 8px;
+    border-bottom: 1px solid #eef2f7;
+  }
+
+  body.mobile-preview .chat-widget .member-chat-head b,
+  body.mobile-preview .direct-chat-head b,
+  body.mobile-preview .direct-chat-peer b {
+    font-size: 20px;
+  }
+
+  body.mobile-preview .direct-chat-peer {
+    grid-template-columns: 44px minmax(0, 1fr);
+  }
+
+  body.mobile-preview .direct-chat-peer img {
+    width: 44px;
+    height: 44px;
+  }
+
+  body.mobile-preview .member-chat-log,
+  body.mobile-preview .chat-widget .member-chat-log,
+  body.mobile-preview .direct-chat-log,
+  body.mobile-preview .direct-chat-rooms {
+    min-height: 0;
+    overflow: auto;
+    padding-bottom: 12px;
+  }
+
+  body.mobile-preview #memberChatSend.member-chat-send,
+  body.mobile-preview .direct-chat-send.member-chat-send {
+    padding: 10px 10px calc(10px + env(safe-area-inset-bottom));
+    border-top: 1px solid #eef2f7;
+  }
+
+  body.mobile-preview .chat-composer {
+    min-height: 76px;
+    border-radius: 16px;
+  }
+}
+
+@media (max-width: 430px) {
+  body.mobile-preview .brand,
+  body.mobile-preview .brand img {
+    width: 160px;
+  }
+
+  body.mobile-preview .account {
+    font-size: 11px;
+  }
+
+  body.mobile-preview .hero-wrap,
+  body.mobile-preview .dashboard,
+  body.mobile-preview .content-grid,
+  body.mobile-preview .games-page,
+  body.mobile-preview .game-detail-page,
+  body.mobile-preview .trade-compose-page,
+  body.mobile-preview .trade-detail-page,
+  body.mobile-preview .mypage-page,
+  body.mobile-preview .mileage-page,
+  body.mobile-preview .notice-page,
+  body.mobile-preview .auth-page {
+    padding-left: 8px;
+    padding-right: 8px;
+  }
+
+  body.mobile-preview .main-menu .nav-link[data-nav]::after {
+    font-size: 11px;
+  }
+
+  body.mobile-preview .mileage-feature-grid {
+    gap: 6px;
+  }
+
+  body.mobile-preview .mileage-feature-grid article,
+  body.mobile-preview .mileage-feature-grid article:nth-child(2),
+  body.mobile-preview .mileage-feature-grid article:nth-child(3) {
+    min-height: 108px;
+    padding: 8px 4px;
+  }
+
+  body.mobile-preview .mileage-feature-grid i {
+    width: 38px;
+    height: 38px;
+  }
+
+  body.mobile-preview .mileage-feature-grid b {
+    font-size: 14px;
+  }
+}
+
+@media (max-width: 900px) {
+  body.mobile-preview {
+    --mobile-tabbar-h: 72px;
+    --mobile-gap: 10px;
+    font-size: 15px;
+  }
+
+  body.mobile-preview::before {
+    left: 8px;
+    bottom: calc(var(--mobile-tabbar-h) + 6px + env(safe-area-inset-bottom));
+    padding: 4px 7px;
+    font-size: 10px;
+    opacity: .86;
+  }
+
+  body.mobile-preview .top-inner {
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 7px 8px;
+    padding: 8px 11px 9px;
+  }
+
+  body.mobile-preview .brand {
+    width: 154px;
+    align-self: center;
+  }
+
+  body.mobile-preview .brand img {
+    width: 154px;
+    max-width: 45vw;
+  }
+
+  body.mobile-preview .account {
+    order: 1;
+    justify-self: end;
+    justify-content: flex-end;
+    max-width: calc(100vw - 178px);
+    gap: 5px;
+    padding: 0;
+  }
+
+  body.mobile-preview .account b,
+  body.mobile-preview .account span,
+  body.mobile-preview .account a,
+  body.mobile-preview .account button {
+    min-height: 28px;
+    padding: 0 7px;
+    font-size: 11px;
+    white-space: nowrap;
+  }
+
+  body.mobile-preview .account a[href="/admin"],
+  body.mobile-preview .account a[href="/staff"] {
+    display: none;
+  }
+
+  body.mobile-preview .account-image-link img {
+    height: 36px;
+  }
+
+  body.mobile-preview .search {
+    grid-column: 1 / -1;
+    min-height: 42px;
+    border-width: 2px;
+    border-radius: 16px;
+  }
+
+  body.mobile-preview .search .search-icon {
+    width: 32px;
+    height: 32px;
+    min-width: 32px;
+    min-height: 32px;
+  }
+
+  body.mobile-preview .suggest-panel {
+    left: 0;
+    right: 0;
+    top: calc(100% + 8px);
+    z-index: 220;
+    max-height: min(52vh, 360px);
+    overflow: auto;
+    border-radius: 12px;
+  }
+
+  body.mobile-preview .main-menu {
+    height: calc(var(--mobile-tabbar-h) + env(safe-area-inset-bottom));
+    padding: 7px 7px calc(7px + env(safe-area-inset-bottom));
+  }
+
+  body.mobile-preview .main-menu .nav-link {
+    min-height: 54px;
+    height: 54px;
+    border: 1px solid #e9eff7;
+    font-size: 0;
+  }
+
+  body.mobile-preview .main-menu .nav-link[data-nav]::after {
+    font-size: 12px;
+    font-weight: 950;
+  }
+
+  body.mobile-preview .hero-wrap,
+  body.mobile-preview .dashboard,
+  body.mobile-preview .content-grid,
+  body.mobile-preview .games-page,
+  body.mobile-preview .game-detail-page,
+  body.mobile-preview .trade-compose-page,
+  body.mobile-preview .trade-detail-page,
+  body.mobile-preview .mileage-page,
+  body.mobile-preview .mypage-page,
+  body.mobile-preview .auth-page,
+  body.mobile-preview .notice-page {
+    width: auto;
+    margin-top: 10px;
+  }
+
+  body.mobile-preview .hero-wrap,
+  body.mobile-preview .dashboard,
+  body.mobile-preview .content-grid {
+    margin-left: 10px;
+    margin-right: 10px;
+  }
+
+  body.mobile-preview .hot-section,
+  body.mobile-preview .hot-section .section-inner {
+    max-width: 100%;
+    overflow: hidden;
+  }
+
+  body.mobile-preview .hot-games {
+    width: 100%;
+    max-width: 100%;
+    overflow-x: auto;
+    overflow-y: hidden;
+    scrollbar-width: none;
+  }
+
+  body.mobile-preview .hot-games::-webkit-scrollbar {
+    display: none;
+  }
+
+  body.mobile-preview .mobile-games-tools {
+    display: grid;
+    gap: 10px;
+    margin: 0 0 10px;
+    padding: 13px;
+    border: 1px solid #dfe8f4;
+    border-radius: 12px;
+    background: #fff;
+    box-shadow: 0 8px 20px rgba(15, 23, 42, .06);
+  }
+
+  body.mobile-preview .mobile-games-tools > div {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+  }
+
+  body.mobile-preview .mobile-games-tools b {
+    font-size: 19px;
+    font-weight: 950;
+  }
+
+  body.mobile-preview .mobile-games-tools span,
+  body.mobile-preview .mobile-games-tools p {
+    margin: 0;
+    color: #64748b;
+    font-size: 13px;
+    font-weight: 850;
+  }
+
+  body.mobile-preview .mobile-games-tools label {
+    display: grid;
+    gap: 6px;
+    font-size: 12px;
+    font-weight: 900;
+  }
+
+  body.mobile-preview .mobile-games-tools input {
+    min-height: 44px;
+    border-radius: 11px;
+    font-size: 15px;
+  }
+
+  body.mobile-preview .mobile-games-tools,
+  body.mobile-preview .games-filter {
+    display: none !important;
+  }
+
+  body.mobile-preview .games-shell {
+    padding: 9px;
+    border-radius: 12px;
+  }
+
+  body.mobile-preview .games-filter {
+    display: flex;
+    gap: 7px;
+    overflow-x: auto;
+    padding-bottom: 3px;
+    scrollbar-width: none;
+  }
+
+  body.mobile-preview .games-filter::-webkit-scrollbar {
+    display: none;
+  }
+
+  body.mobile-preview .games-filter a {
+    flex: 0 0 auto;
+    min-width: 46px;
+    min-height: 42px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 10px;
+  }
+
+  body.mobile-preview .games-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 7px;
+  }
+
+  body.mobile-preview .game-list-card {
+    min-width: 0;
+    overflow: hidden;
+    border-radius: 8px;
+  }
+
+  body.mobile-preview .game-list-card[hidden] {
+    display: none !important;
+  }
+
+  body.mobile-preview .game-list-card img {
+    width: 100%;
+    aspect-ratio: 1 / 1;
+    object-fit: cover;
+  }
+
+  body.mobile-preview .game-list-card span {
+    height: 26px;
+    min-height: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 2px 3px;
+    font-size: 10.5px;
+    line-height: 1.1;
+    word-break: keep-all;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    text-align: center;
+  }
+
+  body.mobile-preview .mobile-games-more {
+    width: 100%;
+    min-height: 48px;
+    margin: 12px 0 2px;
+    border: 1px solid #cfdceb;
+    border-radius: 12px;
+    background: #f8fafc;
+    color: #0f172a;
+    font-size: 15px;
+    font-weight: 950;
+  }
+
+  body.mobile-preview .mobile-games-more[hidden] {
+    display: none;
+  }
+
+  body.mobile-preview .game-detail-hero nav {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  body.mobile-preview .market-panel {
+    border-radius: 12px;
+  }
+
+  body.mobile-preview .market-panel__tabs {
+    display: flex;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+
+  body.mobile-preview .market-panel__tabs::-webkit-scrollbar {
+    display: none;
+  }
+
+  body.mobile-preview .market-panel__tabs a {
+    flex: 0 0 auto;
+    min-width: 92px;
+    min-height: 48px;
+    font-size: 15px;
+  }
+
+  body.mobile-preview .market-panel__row {
+    grid-template-columns: 1fr;
+    gap: 8px;
+    padding: 12px;
+  }
+
+  body.mobile-preview .market-panel__row > div {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    padding-bottom: 2px;
+    scrollbar-width: none;
+  }
+
+  body.mobile-preview .market-panel__row > div::-webkit-scrollbar {
+    display: none;
+  }
+
+  body.mobile-preview .market-panel a,
+  body.mobile-preview .market-panel button {
+    flex: 0 0 auto;
+    min-height: 40px;
+    padding: 0 13px;
+  }
+
+  body.mobile-preview .market-panel__price > div {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto auto minmax(0, 1fr) auto;
+    overflow: visible;
+  }
+
+  body.mobile-preview .market-panel__price button {
+    grid-column: span 3;
+  }
+
+  body.mobile-preview .market-panel__search > div {
+    grid-template-columns: minmax(0, 1fr) 44px;
+    overflow: visible;
+  }
+
+  body.mobile-preview .trade-card {
+    border-radius: 12px;
+  }
+
+  body.mobile-preview .trade-detail-page {
+    padding-bottom: calc(184px + env(safe-area-inset-bottom));
+  }
+
+  body.mobile-preview .trade-detail-shell {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+
+  body.mobile-preview .trade-detail-card {
+    padding: 15px 13px;
+  }
+
+  body.mobile-preview .trade-detail-summary {
+    grid-template-columns: 1fr;
+  }
+
+  body.mobile-preview .trade-detail-action {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: calc(var(--mobile-tabbar-h) + env(safe-area-inset-bottom));
+    z-index: 92;
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 8px;
+    padding: 8px 10px;
+    border-top: 1px solid #dfe6f2;
+    border-radius: 0;
+    background: rgba(255, 255, 255, .98);
+    box-shadow: 0 -10px 24px rgba(15, 23, 42, .12);
+  }
+
+  body.mobile-preview .trade-detail-action dl {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+    margin: 0;
+  }
+
+  body.mobile-preview .trade-detail-action dl div {
+    display: grid;
+    gap: 2px;
+    padding: 8px 10px;
+    border: 1px solid #edf2f8;
+    border-radius: 10px;
+    background: #f8fafc;
+  }
+
+  body.mobile-preview .trade-detail-action dt {
+    font-size: 12px;
+  }
+
+  body.mobile-preview .trade-detail-action dd {
+    font-size: 16px;
+  }
+
+  body.mobile-preview .trade-detail-buttons {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+  }
+
+  body.mobile-preview .trade-detail-buttons > * {
+    min-width: 0;
+    min-height: 46px;
+  }
+
+  body.mobile-preview .trade-detail-buttons em {
+    grid-column: 1 / -1;
+    min-height: 38px;
+    display: grid;
+    place-items: center;
+    border-radius: 10px;
+    background: #f1f5f9;
+    font-size: 13px;
+    font-style: normal;
+    font-weight: 900;
+  }
+
+  body.mobile-preview .trade-compose-page {
+    padding-bottom: calc(112px + env(safe-area-inset-bottom));
+  }
+
+  body.mobile-preview .trade-compose__hero {
+    margin-bottom: 10px;
+  }
+
+  body.mobile-preview .trade-compose__actions {
+    bottom: calc(var(--mobile-tabbar-h) + env(safe-area-inset-bottom));
+    z-index: 91;
+  }
+
+  body.mobile-preview .trade-editor-toolbar {
+    max-height: 152px;
+    overflow: auto;
+  }
+
+  body.mobile-preview .mileage-page {
+    padding-bottom: calc(88px + env(safe-area-inset-bottom));
+  }
+
+  body.mobile-preview .mileage-feature-grid {
+    grid-template-columns: 1fr;
+  }
+
+  body.mobile-preview .mileage-feature-grid article,
+  body.mobile-preview .mileage-feature-grid article:nth-child(2),
+  body.mobile-preview .mileage-feature-grid article:nth-child(3) {
+    min-height: 76px;
+    grid-template-columns: 48px minmax(0, 1fr);
+    align-items: center;
+    text-align: left;
+  }
+
+  body.mobile-preview .mileage-feature-grid i {
+    grid-row: span 2;
+  }
+
+  body.mobile-preview .amount-presets button {
+    font-size: 14px;
+  }
+
+  body.mobile-preview .mileage-submit {
+    min-height: 50px;
+    border-radius: 12px;
+    font-size: 16px;
+  }
+
+  body.mobile-preview .withdraw-confirm-layer {
+    align-items: end;
+    padding: 12px 10px calc(12px + env(safe-area-inset-bottom));
+  }
+
+  body.mobile-preview .withdraw-confirm-card {
+    width: 100%;
+    max-height: min(78vh, 620px);
+    overflow: auto;
+    padding: 20px 16px;
+    border-radius: 16px;
+  }
+
+  body.mobile-preview .charge-confirm-card .withdraw-confirm-actions {
+    max-width: none;
+    margin-left: 0;
+  }
+
+  body.mobile-preview .chat-fab,
+  body.mobile-preview .direct-chat-fab {
+    width: 54px;
+    height: 54px;
+    bottom: calc(var(--mobile-tabbar-h) + 14px + env(safe-area-inset-bottom));
+  }
+
+  body.mobile-preview[data-page="trade"] .chat-fab,
+  body.mobile-preview[data-page="trade"] .direct-chat-fab,
+  body.mobile-preview[data-page="point"] .chat-fab,
+  body.mobile-preview[data-page="point"] .direct-chat-fab {
+    bottom: calc(var(--mobile-tabbar-h) + 94px + env(safe-area-inset-bottom));
+  }
+
+  body.mobile-preview[data-page="trade"] .direct-chat-fab,
+  body.mobile-preview[data-page="point"] .direct-chat-fab {
+    right: 72px;
+  }
+
+  body.mobile-preview[data-page="trade"] .chat-fab,
+  body.mobile-preview[data-page="point"] .chat-fab {
+    right: 12px;
+  }
+
+  body.mobile-preview.mobile-chat-open .main-menu,
+  body.mobile-preview.mobile-chat-open::before,
+  body.mobile-preview.mobile-chat-open .chat-fab,
+  body.mobile-preview.mobile-chat-open .direct-chat-fab {
+    display: none;
+  }
+
+  body.mobile-preview .chat-widget,
+  body.mobile-preview .direct-chat-widget {
+    left: 0;
+    top: 0;
+    width: 100vw;
+    height: 100dvh;
+    max-height: 100dvh;
+  }
+}
+
+@media (max-width: 430px) {
+  body.mobile-preview .brand,
+  body.mobile-preview .brand img {
+    width: 144px;
+  }
+
+  body.mobile-preview .account {
+    max-width: calc(100vw - 164px);
+  }
+
+  body.mobile-preview .account b,
+  body.mobile-preview .account span,
+  body.mobile-preview .account a,
+  body.mobile-preview .account button {
+    padding: 0 6px;
+    font-size: 10.5px;
+  }
+
+  body.mobile-preview .market-panel__price > div {
+    grid-template-columns: auto minmax(0, 1fr) auto;
+  }
+
+  body.mobile-preview .market-panel__price i {
+    display: none;
+  }
+
+  body.mobile-preview .market-panel__price button {
+    grid-column: span 1;
+  }
+
+  body.mobile-preview .trade-detail-action dl {
+    grid-template-columns: 1fr;
+  }
+
+  body.mobile-preview .trade-detail-page {
+    padding-bottom: calc(220px + env(safe-area-inset-bottom));
+  }
+}
+
+@media (max-width: 900px) {
+  body.mobile-preview {
+    --mobile-tabbar-h: 54px;
+    padding-bottom: calc(var(--mobile-tabbar-h) + env(safe-area-inset-bottom));
+  }
+
+  body.mobile-preview .top-inner {
+    grid-template-columns: auto minmax(0, 1fr);
+    align-items: center;
+    gap: 7px 8px;
+    padding: 8px 10px 9px;
+  }
+
+  body.mobile-preview .brand {
+    grid-column: 1;
+    grid-row: 1;
+    width: 152px;
+  }
+
+  body.mobile-preview .brand img {
+    width: 152px;
+    max-width: 42vw;
+    display: block;
+  }
+
+  body.mobile-preview .account {
+    grid-column: 2;
+    grid-row: 1;
+    order: initial;
+    justify-self: end;
+    justify-content: flex-end;
+    max-width: 100%;
+    gap: 5px;
+    overflow-x: auto;
+  }
+
+  body.mobile-preview .account b,
+  body.mobile-preview .account span,
+  body.mobile-preview .account a,
+  body.mobile-preview .account button {
+    min-height: 28px;
+    display: inline-grid;
+    place-items: center;
+    padding: 0 8px;
+    font-size: 11px;
+    line-height: 1;
+    white-space: nowrap;
+  }
+
+  body.mobile-preview .account-image-link img {
+    height: 34px;
+  }
+
+  body.mobile-preview .account button[data-action="logout"] {
+    display: none;
+  }
+
+  body.mobile-preview .search {
+    grid-column: 1 / -1;
+    grid-row: 2;
+  }
+
+  body.mobile-preview .hero-banner {
+    min-height: 0;
+    aspect-ratio: 1177 / 299;
+    border-radius: 10px;
+    background: #050608;
+  }
+
+  body.mobile-preview .hero-banner-track {
+    height: 100%;
+  }
+
+  body.mobile-preview .hero-banner-image {
+    height: 100%;
+    object-fit: contain;
+    background: #050608;
+  }
+
+  body.mobile-preview .ad-placeholder {
+    min-height: 0;
+    aspect-ratio: 1721 / 914;
+    padding: 0;
+    background: #eaf7ff;
+  }
+
+  body.mobile-preview .ad-placeholder img {
+    width: 100%;
+    height: 100%;
+    min-height: 0;
+    object-fit: contain;
+  }
+
+  body.mobile-preview .notice-card ul {
+    gap: 10px;
+    margin-top: 14px;
+  }
+
+  body.mobile-preview .notice-card li,
+  body.mobile-preview .notice-card li a {
+    width: 100%;
+    min-width: 0;
+  }
+
+  body.mobile-preview .notice-card li a {
+    display: flex;
+    overflow: hidden;
+    white-space: nowrap;
+  }
+
+  body.mobile-preview .notice-card li .notice-tag,
+  body.mobile-preview .notice-card li .notice-dot {
+    flex: 0 0 auto;
+  }
+
+  body.mobile-preview .notice-title-text {
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  body.mobile-preview .rank-panel li:nth-child(n+11) {
+    display: none;
+  }
+
+  body.mobile-preview .rank-panel ol {
+    grid-template-rows: repeat(10, 38px);
+  }
+
+  body.mobile-preview .main-menu {
+    height: calc(var(--mobile-tabbar-h) + env(safe-area-inset-bottom));
+    gap: 4px;
+    padding: 6px 6px calc(6px + env(safe-area-inset-bottom));
+  }
+
+  body.mobile-preview .main-menu .nav-link[data-nav="games"] {
+    display: grid;
+  }
+
+  body.mobile-preview .main-menu .nav-link[data-nav="mypage"],
+  body.mobile-preview .main-menu .nav-link[data-nav="support"] {
+    display: none;
+  }
+
+  body.mobile-preview .main-menu .nav-link {
+    min-height: 36px;
+    height: 36px;
+    place-items: center;
+    align-content: center;
+    padding: 0 1px;
+    border-radius: 10px;
+  }
+
+  body.mobile-preview .main-menu .nav-link[data-nav]::after {
+    display: grid;
+    place-items: center;
+    min-height: 100%;
+    margin: 0;
+    font-size: 11px;
+    line-height: 1;
+  }
+
+  body.mobile-preview .main-menu .nav-link[data-nav="games"]::after {
+    content: "게임리스트";
+  }
+
+  body.mobile-preview .main-menu .nav-link[data-nav="games"],
+  body.mobile-preview .main-menu .nav-link[data-nav="charge"],
+  body.mobile-preview .main-menu .nav-link[data-nav="withdraw"] {
+    color: #172033;
+    background: #f3f7fc;
+    border-color: #e4ebf5;
+  }
+
+  body.mobile-preview .mobile-select {
+    position: relative;
+    min-width: 0;
+  }
+
+  body.mobile-preview select[name="phoneCarrier"][data-mobile-select-ready="true"] {
+    display: none !important;
+  }
+
+  body.mobile-preview .phone-wrap,
+  body.mobile-preview .phone-row {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 8px;
+    align-items: start;
+    width: 100%;
+  }
+
+  body.mobile-preview .phone-wrap .mobile-select,
+  body.mobile-preview .phone-row .mobile-select {
+    grid-column: 1 / -1;
+  }
+
+  body.mobile-preview .phone-wrap input,
+  body.mobile-preview .phone-row input {
+    width: 100%;
+    min-width: 0;
+  }
+
+  body.mobile-preview .mobile-select__button {
+    width: 100%;
+    min-height: 48px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 42px 0 14px;
+    border: 1px solid #cdd8e8;
+    border-radius: 12px;
+    background: #fff;
+    color: #0f172a;
+    font-size: 15px;
+    font-weight: 900;
+    text-align: left;
+  }
+
+  body.mobile-preview .mobile-select__button::after {
+    content: "";
+    position: absolute;
+    right: 15px;
+    top: 50%;
+    width: 8px;
+    height: 8px;
+    border-right: 2px solid #64748b;
+    border-bottom: 2px solid #64748b;
+    transform: translateY(-70%) rotate(45deg);
+  }
+
+  body.mobile-preview .mobile-select.is-open .mobile-select__button::after {
+    transform: translateY(-25%) rotate(225deg);
+  }
+
+  body.mobile-preview .mobile-select__list {
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: calc(100% + 6px);
+    z-index: 240;
+    max-height: 248px;
+    overflow: auto;
+    padding: 6px;
+    border: 1px solid #cdd8e8;
+    border-radius: 14px;
+    background: #fff;
+    box-shadow: 0 18px 38px rgba(15, 23, 42, .18);
+  }
+
+  body.mobile-preview .mobile-select__option {
+    width: 100%;
+    min-height: 42px;
+    display: flex;
+    align-items: center;
+    padding: 0 12px;
+    border-radius: 10px;
+    background: transparent;
+    color: #172033;
+    font-size: 14px;
+    font-weight: 850;
+    text-align: left;
+  }
+
+  body.mobile-preview .mobile-select__option:hover,
+  body.mobile-preview .mobile-select__option:focus-visible {
+    background: #eef6ff;
+    color: #075bd5;
+    outline: none;
+  }
+
+  body.mobile-preview .compose-field--price .price-entry,
+  body.mobile-preview .price-entry {
+    grid-template-columns: minmax(0, 1fr) 30px;
+    align-items: center;
+    gap: 7px;
+  }
+
+  body.mobile-preview .price-entry span {
+    align-self: center;
+    margin: 0;
+    color: #0f172a;
+    font-size: 14px;
+    font-weight: 900;
+    line-height: 1;
+  }
+
+  body.mobile-preview .price-presets {
+    grid-column: auto;
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 8px;
+    margin-top: 9px;
+  }
+
+  body.mobile-preview .price-presets button {
+    min-width: 0;
+    min-height: 40px;
+    padding: 0 6px;
+    font-size: 14px;
+  }
+
+  body.mobile-preview .price-presets button:nth-child(n+4) {
+    display: none;
+  }
+
+  body.mobile-preview .compose-field--editor {
+    overflow: hidden;
+  }
+
+  body.mobile-preview .trade-editor-wrap {
+    overflow: hidden;
+    border-radius: 10px;
+  }
+
+  body.mobile-preview .trade-editor-toolbar {
+    display: grid;
+    grid-template-columns: repeat(12, minmax(0, 1fr));
+    gap: 6px;
+    max-height: none;
+    overflow: visible;
+    padding: 8px;
+    background: #f8fbff;
+  }
+
+  body.mobile-preview .trade-editor-tool-group {
+    display: contents;
+  }
+
+  body.mobile-preview .trade-editor-toolbar select {
+    width: 100%;
+    min-width: 0;
+    min-height: 36px;
+    padding: 0 8px;
+    font-size: 13px;
+  }
+
+  body.mobile-preview .trade-editor-toolbar select[data-trade-font] {
+    grid-column: span 6;
+  }
+
+  body.mobile-preview .trade-editor-toolbar select[data-trade-size] {
+    grid-column: span 3;
+  }
+
+  body.mobile-preview .trade-editor-toolbar select[data-trade-weight] {
+    grid-column: span 3;
+  }
+
+  body.mobile-preview .trade-editor-toolbar button {
+    min-width: 0;
+    min-height: 36px;
+    padding: 0 7px;
+    font-size: 13px;
+  }
+
+  body.mobile-preview .trade-editor-toolbar button:not(.trade-editor-apply):not(.trade-editor-photo):not([data-trade-command="bold"]):not([data-trade-command="italic"]):not([data-trade-command="underline"]) {
+    display: none;
+  }
+
+  body.mobile-preview .trade-editor-toolbar button[data-trade-command="bold"],
+  body.mobile-preview .trade-editor-toolbar button[data-trade-command="italic"],
+  body.mobile-preview .trade-editor-toolbar button[data-trade-command="underline"] {
+    grid-column: span 1;
+    padding: 0;
+    font-size: 14px;
+  }
+
+  body.mobile-preview .trade-editor-toolbar .trade-editor-apply {
+    grid-column: span 5;
+    font-size: 12px;
+    white-space: nowrap;
+  }
+
+  body.mobile-preview .trade-editor-toolbar .trade-editor-photo {
+    grid-column: span 4;
+    font-size: 12px;
+    white-space: nowrap;
+  }
+
+  body.mobile-preview .trade-rich-editor {
+    min-height: 150px;
+    max-height: 42vh;
+    overflow: auto;
+    padding: 13px;
+    font-size: 15px;
+    background: #fff;
+  }
+
+  body.mobile-preview .chat-log {
+    padding: 12px 12px;
+  }
+
+  body.mobile-preview .chat-log p,
+  body.mobile-preview .chat-widget .member-chat-log p,
+  body.mobile-preview .direct-chat-log p {
+    max-width: 74%;
+    margin-bottom: 9px;
+  }
+
+  body.mobile-preview .chat-widget .member-chat-log p.staff,
+  body.mobile-preview .direct-chat-log p.staff {
+    grid-template-columns: 28px minmax(0, auto);
+    column-gap: 7px;
+  }
+
+  body.mobile-preview .chat-widget .member-chat-log p.staff::before {
+    width: 24px;
+    height: 24px;
+  }
+
+  body.mobile-preview .chat-log span,
+  body.mobile-preview .chat-widget .member-chat-log span,
+  body.mobile-preview .direct-chat-log span {
+    max-width: min(100%, 264px);
+    padding: 8px 11px;
+    border-radius: 16px;
+    font-size: 14px;
+    line-height: 1.38;
+  }
+
+  body.mobile-preview .chat-log b,
+  body.mobile-preview .chat-widget .member-chat-log b,
+  body.mobile-preview .direct-chat-log b {
+    margin-bottom: 3px;
+    font-size: 11px;
+  }
+
+  body.mobile-preview .chat-log .chat-image,
+  body.mobile-preview .chat-widget .member-chat-log .chat-image,
+  body.mobile-preview .direct-chat-log .chat-image {
+    max-width: 180px;
+    max-height: 150px;
+    border-radius: 12px;
+  }
+
+  body.mobile-preview[data-page="staff"] .staff-page {
+    min-width: 0;
+  }
+
+  body.mobile-preview[data-page="staff"] .chat-log p {
+    max-width: 74%;
+  }
+
+  body.mobile-preview .chat-widget.open,
+  body.mobile-preview .direct-chat-widget.open {
+    left: 0 !important;
+    right: auto !important;
+    top: 0 !important;
+    bottom: auto !important;
+    width: 100vw !important;
+    max-width: none !important;
+    height: 100dvh !important;
+    max-height: 100dvh !important;
+  }
+
+  body.mobile-preview .chat-widget .member-chat-head,
+  body.mobile-preview .direct-chat-head {
+    display: grid !important;
+    grid-template-columns: 48px minmax(0, 1fr) 44px !important;
+    gap: 8px;
+    align-items: center;
+    width: 100%;
+  }
+
+  body.mobile-preview .chat-widget .member-chat-head > div,
+  body.mobile-preview .direct-chat-head > div,
+  body.mobile-preview #directChatTitle {
+    min-width: 0;
+    overflow: hidden;
+  }
+
+  body.mobile-preview .chat-widget .member-chat-head b,
+  body.mobile-preview .chat-widget .member-chat-head small,
+  body.mobile-preview .direct-chat-head b,
+  body.mobile-preview .direct-chat-head small {
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    word-break: keep-all;
+  }
+
+  body.mobile-preview .chat-widget .member-chat-head b,
+  body.mobile-preview .direct-chat-head b {
+    font-size: 18px;
+    line-height: 1.15;
+  }
+
+  body.mobile-preview .chat-widget .member-chat-head small,
+  body.mobile-preview .direct-chat-head small {
+    font-size: 11px;
+  }
+}
+
+@media (max-width: 430px) {
+  body.mobile-preview .brand,
+  body.mobile-preview .brand img {
+    width: 142px;
+  }
+
+  body.mobile-preview .account {
+    max-width: calc(100vw - 158px);
+  }
+
+  body.mobile-preview .account b,
+  body.mobile-preview .account span,
+  body.mobile-preview .account a,
+  body.mobile-preview .account button {
+    min-height: 27px;
+    padding: 0 6px;
+    font-size: 10.5px;
+  }
+}

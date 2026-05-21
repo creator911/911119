@@ -15,6 +15,7 @@ data/scrape-cache/
 
 # Local database and backups
 data/db.json
+data/mobile-preview-db.json
 data/db.backup*.json
 data/db.manual-backup*.json
 

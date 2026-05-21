@@ -1,5 +1,6 @@
 const $ = (selector, root = document) => root.querySelector(selector);
 const $$ = (selector, root = document) => [...root.querySelectorAll(selector)];
+const isMobilePreview = document.body.classList.contains("mobile-preview");
 
 async function post(url, data) {
   const res = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data) });
@@ -93,6 +94,127 @@ if (focusChargeAccount) {
     $(".charge-account-check")?.scrollIntoView({ behavior: "smooth", block: "center" });
   });
 }
+
+function initMobilePreviewGames() {
+  const grid = $(".games-grid");
+  if (!grid) return;
+  const cards = $$(".game-list-card", grid);
+  if (!cards.length) return;
+  const countTarget = $("[data-mobile-game-count]");
+  const filterInput = $("[data-mobile-game-filter]");
+  const step = 24;
+  let visibleLimit = step;
+  let query = "";
+  const more = document.createElement("button");
+  more.type = "button";
+  more.className = "mobile-games-more";
+  grid.insertAdjacentElement("afterend", more);
+
+  const update = () => {
+    const matches = cards.filter((card) => !query || card.textContent.toLowerCase().includes(query));
+    cards.forEach((card) => {
+      const matched = matches.includes(card);
+      const hiddenByLimit = matched && matches.indexOf(card) >= visibleLimit;
+      card.hidden = !matched || hiddenByLimit;
+    });
+    const shown = Math.min(matches.length, visibleLimit);
+    more.hidden = shown >= matches.length;
+    more.textContent = `더보기 (${shown}/${matches.length})`;
+    if (countTarget) {
+      countTarget.textContent = query
+        ? `${matches.length.toLocaleString()}개의 검색 결과`
+        : `처음 ${shown.toLocaleString()}개만 보여줍니다. 검색하거나 더보기로 이어서 볼 수 있습니다.`;
+    }
+  };
+
+  filterInput?.addEventListener("input", () => {
+    query = filterInput.value.trim().toLowerCase();
+    visibleLimit = step;
+    update();
+  });
+  more.addEventListener("click", () => {
+    visibleLimit += step;
+    update();
+  });
+  update();
+}
+
+function initMobilePreviewCollisionGuards() {
+  const widgets = $$("#chatWidget, #directChatWidget");
+  const syncChatState = () => {
+    document.body.classList.toggle("mobile-chat-open", widgets.some((item) => item.classList.contains("open")));
+  };
+  widgets.forEach((widget) => new MutationObserver(syncChatState).observe(widget, { attributes: true, attributeFilter: ["class"] }));
+  syncChatState();
+
+  document.addEventListener("focusin", (event) => {
+    const target = event.target;
+    if (!target.matches?.("input, textarea, select, [contenteditable='true']")) return;
+    window.setTimeout(() => target.scrollIntoView({ block: "center", inline: "nearest", behavior: "smooth" }), 180);
+  });
+}
+
+function initMobilePreviewSelects() {
+  const select = $("select[name='phoneCarrier']");
+  if (!select || select.dataset.mobileSelectReady === "true") return;
+  select.dataset.mobileSelectReady = "true";
+  const wrap = document.createElement("div");
+  wrap.className = "mobile-select";
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = "mobile-select__button";
+  button.setAttribute("aria-haspopup", "listbox");
+  button.setAttribute("aria-expanded", "false");
+  const list = document.createElement("div");
+  list.className = "mobile-select__list";
+  list.setAttribute("role", "listbox");
+  list.hidden = true;
+  const syncButton = () => {
+    button.textContent = select.options[select.selectedIndex]?.textContent || select.value || "";
+  };
+  [...select.options].forEach((option) => {
+    const item = document.createElement("button");
+    item.type = "button";
+    item.className = "mobile-select__option";
+    item.textContent = option.textContent;
+    item.dataset.value = option.value;
+    item.setAttribute("role", "option");
+    item.addEventListener("click", () => {
+      select.value = option.value;
+      select.dispatchEvent(new Event("change", { bubbles: true }));
+      syncButton();
+      list.hidden = true;
+      wrap.classList.remove("is-open");
+      button.setAttribute("aria-expanded", "false");
+    });
+    list.appendChild(item);
+  });
+  button.addEventListener("click", () => {
+    const open = list.hidden;
+    list.hidden = !open;
+    wrap.classList.toggle("is-open", open);
+    button.setAttribute("aria-expanded", String(open));
+  });
+  select.addEventListener("change", syncButton);
+  select.insertAdjacentElement("afterend", wrap);
+  wrap.append(button, list);
+  syncButton();
+  document.addEventListener("click", (event) => {
+    if (wrap.contains(event.target)) return;
+    list.hidden = true;
+    wrap.classList.remove("is-open");
+    button.setAttribute("aria-expanded", "false");
+  });
+}
+
+function initMobilePreviewUx() {
+  if (!isMobilePreview) return;
+  initMobilePreviewGames();
+  initMobilePreviewCollisionGuards();
+  initMobilePreviewSelects();
+}
+
+initMobilePreviewUx();
 
 document.addEventListener("mousedown", (event) => {
   if (event.target.closest(".trade-editor-toolbar button")) event.preventDefault();

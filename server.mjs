@@ -14,10 +14,11 @@ const OWNER_PASSWORD = process.env.ITEMZONE_OWNER_PASSWORD || "change-me-before-
 const CHARGE_BANK = process.env.ITEMZONE_CHARGE_BANK || "은행명을 입력하세요";
 const CHARGE_HOLDER = process.env.ITEMZONE_CHARGE_HOLDER || "예금주를 입력하세요";
 const CHARGE_NUMBER = process.env.ITEMZONE_CHARGE_NUMBER || "계좌번호를 입력하세요";
+const MOBILE_PREVIEW = process.env.ITEMZONE_MOBILE_PREVIEW === "true";
 const DATA_DIR = path.join(__dirname, "data");
-const DB_PATH = path.join(DATA_DIR, "db.json");
+const DB_PATH = process.env.ITEMZONE_DB_PATH ? path.resolve(__dirname, process.env.ITEMZONE_DB_PATH) : path.join(DATA_DIR, "db.json");
 const DB_BACKUP_KEEP = 30;
-const DATABASE_URL = process.env.ITEMZONE_DATABASE_URL || process.env.DATABASE_URL || "";
+const DATABASE_URL = MOBILE_PREVIEW ? "" : (process.env.ITEMZONE_DATABASE_URL || process.env.DATABASE_URL || "");
 const DATABASE_SSL = process.env.ITEMZONE_DATABASE_SSL === "true";
 const USE_POSTGRES = Boolean(DATABASE_URL);
 const PG_COLLECTIONS = [
@@ -39,6 +40,7 @@ const PUBLIC_DIR = path.join(__dirname, "public");
 const LEGAL_DIR = path.join(DATA_DIR, "legal");
 const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 let dbWriteQueue = Promise.resolve();
+let jsonDbCache = null;
 let pgPoolPromise = null;
 let pgSchemaReady = false;
 let pgCache = null;
@@ -345,15 +347,18 @@ async function readDb() {
 }
 
 async function readJsonDb() {
+  if (jsonDbCache) return jsonDbCache;
   try {
     const db = JSON.parse(await retryBusy(() => readFile(DB_PATH, "utf8")));
     const normalized = normalizeDb(db);
     if (normalized.changed) await writeDb(normalized.db);
-    return normalized.db;
+    jsonDbCache = normalized.db;
+    return jsonDbCache;
   } catch (error) {
     if (error?.code === "ENOENT") {
       await seedDb();
-      return JSON.parse(await readFile(DB_PATH, "utf8"));
+      jsonDbCache = JSON.parse(await readFile(DB_PATH, "utf8"));
+      return jsonDbCache;
     }
     console.error("DB read failed; keeping existing db.json untouched.", error);
     throw error;
@@ -571,7 +576,8 @@ async function pruneDbBackups() {
 
 async function writeJsonDb(db) {
   const payload = JSON.stringify(db, null, 2);
-  return writeDbPayload(payload);
+  await writeDbPayload(payload);
+  jsonDbCache = db;
 }
 
 async function writeDb(db) {
@@ -713,6 +719,11 @@ async function currentUser(req, db) {
   const expected = crypto.createHmac("sha256", SESSION_SECRET).update(payload).digest("hex");
   if (sig !== expected) return null;
   return user;
+}
+
+function requestUrl(req) {
+  const host = req.headers.host || `127.0.0.1:${PORT}`;
+  return new URL(req.url || "/", `http://${host}`);
 }
 
 function sessionCookie(user) {
@@ -1920,6 +1931,10 @@ function tradeDetailPage(user, db, type, postId) {
 
 function layout(title, user, content, page = "home") {
   const pageTitle = page === "home" && title === "홈" ? "아이템존 - 신뢰의 No.1" : `${title} - 아이템존`;
+  const previewClass = MOBILE_PREVIEW ? " class=\"mobile-preview\"" : "";
+  const previewCss = MOBILE_PREVIEW ? "\n  <link rel=\"stylesheet\" href=\"/mobile-preview.css?v=mobile-preview-14\">" : "";
+  const appScript = MOBILE_PREVIEW ? "/app.js?v=mobile-preview-3" : "/app.js";
+  const appScriptAttrs = MOBILE_PREVIEW ? "" : " defer";
   return `<!doctype html>
 <html lang="ko">
 <head>
@@ -1927,12 +1942,12 @@ function layout(title, user, content, page = "home") {
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>${pageTitle}</title>
   <link rel="icon" type="image/png" href="/favicon.png">
-  <link rel="stylesheet" href="/styles.css">
+  <link rel="stylesheet" href="/styles.css">${previewCss}
 </head>
-<body data-page="${page}" data-user="${user ? user.id : ""}" data-role="${user ? user.role : ""}">
+<body${previewClass} data-page="${page}" data-user="${user ? user.id : ""}" data-role="${user ? user.role : ""}">
   ${header(user)}
   ${content}
-  <script src="/app.js" defer></script>
+  <script src="${appScript}"${appScriptAttrs}></script>
 </body>
 </html>`;
 }
@@ -2171,7 +2186,16 @@ function gamesPage(user, db, group = "전체") {
     <img src="${game.imageUrl || game.localImageUrl || "/assets/games/game-1.svg"}" alt="">
     <span>${esc(game.name)}</span>
   </a>`).join("");
+  const mobileTools = MOBILE_PREVIEW ? `<section class="mobile-games-tools" aria-label="모바일 게임 찾기">
+      <div>
+        <b>게임 찾기</b>
+        <span>${games.length.toLocaleString()}개</span>
+      </div>
+      <label><span>게임명 검색</span><input type="search" data-mobile-game-filter placeholder="게임명을 입력하세요" autocomplete="off"></label>
+      <p data-mobile-game-count></p>
+    </section>` : "";
   return layout("게임 리스트", user, `<main class="games-page">
+    ${mobileTools}
     <section class="games-shell">
       <nav class="games-filter" aria-label="초성 필터">${groupTabs}</nav>
       <section class="games-grid">${cards || "<p class='empty'>해당 초성의 게임이 없습니다.</p>"}</section>
@@ -2829,14 +2853,14 @@ function chatWidget(user) {
 
 async function api(req, res, db, user, pathname) {
   try {
-    const requestUrl = new URL(req.url, `http://${req.headers.host}`);
+    const currentUrl = requestUrl(req);
     if (pathname === "/api/search-games" && req.method === "GET") {
-      const q = requestUrl.searchParams.get("q") || "";
+      const q = currentUrl.searchParams.get("q") || "";
       return send(res, 200, { games: searchGameResults(db, q) });
     }
     if (pathname === "/api/check-availability" && req.method === "GET") {
-      const field = requestUrl.searchParams.get("field");
-      const value = String(requestUrl.searchParams.get("value") || "").trim();
+      const field = currentUrl.searchParams.get("field");
+      const value = String(currentUrl.searchParams.get("value") || "").trim();
       if (!["username", "nickname"].includes(field)) return send(res, 400, { error: "확인 항목이 올바르지 않습니다." });
       if (!value) return send(res, 200, { available: false, message: "입력 대기" });
       const exists = db.users.some((u) => String(u[field] || "").toLowerCase() === value.toLowerCase());
@@ -2871,7 +2895,7 @@ async function api(req, res, db, user, pathname) {
     if (pathname === "/api/me") return send(res, 200, { user: user && publicUser(user) });
     if (pathname === "/api/admin/user-ip" && req.method === "GET") {
       if (!protect(user, "admin")) return send(res, 403, { error: "권한이 없습니다." });
-      const target = db.users.find((item) => item.id === requestUrl.searchParams.get("id"));
+      const target = db.users.find((item) => item.id === currentUrl.searchParams.get("id"));
       if (!target) return send(res, 404, { error: "회원을 찾을 수 없습니다." });
       return send(res, 200, {
         id: target.id,
@@ -3626,7 +3650,7 @@ async function serveStatic(req, res, pathname) {
 }
 
 async function router(req, res) {
-  const url = new URL(req.url, `http://${req.headers.host}`);
+  const url = requestUrl(req);
   const db = await readDb();
   const requestIp = clientIp(req);
   if (isIpBanned(db, requestIp)) return sendIpBlocked(req, res);
