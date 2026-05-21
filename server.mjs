@@ -1576,7 +1576,7 @@ function renderTradeCard(post, db, owner = false) {
       <h3>${esc(post.title || "제목 없음")}</h3>
       <small>${esc(displayMember.nickname)} · ${new Date(post.createdAt).toLocaleDateString("ko-KR")}</small>
     </div>
-    <div class="trade-card__side"><p>${esc(post.gameName || post.game)} · ${esc(post.server || "서버전체")}</p>${unitPrice ? `<span>1개당 ${won(unitPrice)}</span>` : ""}<strong>${won(post.price)}</strong></div>
+    <div class="trade-card__side"><p><bdi class="trade-card__game">${esc(post.gameName || post.game)}</bdi><bdi class="trade-card__sep"> · </bdi><bdi class="trade-card__server">${esc(post.server || "서버전체")}</bdi></p>${unitPrice ? `<span>1개당 ${won(unitPrice)}</span>` : ""}<strong>${won(post.price)}</strong></div>
     ${owner ? `<label class="status-update">상태<select data-trade-status="${esc(post.id)}" data-trade-type="${post.type}">${statusOptions.map((item) => `<option value="${esc(item)}" ${item === status ? "selected" : ""}>${esc(tradeStatusLabel(item, post.type) || item)}</option>`).join("")}</select></label>` : ""}
   </article>`;
 }

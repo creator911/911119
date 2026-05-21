@@ -393,49 +393,91 @@ body.mobile-preview.mobile-preview-debug::before {
 
   body.mobile-preview .trade-card {
     grid-template-columns: 34px minmax(0, 1fr);
-    gap: 10px;
-    padding: 13px 12px;
+    gap: 5px 10px;
+    align-items: start;
+    padding: 12px;
   }
 
   body.mobile-preview .trade-card__grade {
     width: 30px;
     height: 30px;
-    grid-row: 1 / span 2;
+    grid-row: 1 / span 3;
+    align-self: center;
   }
 
   body.mobile-preview .trade-card__main {
     min-width: 0;
+    display: contents;
   }
 
   body.mobile-preview .trade-card__meta {
+    grid-column: 2;
     display: flex;
     flex-wrap: wrap;
-    gap: 5px;
+    gap: 4px;
+  }
+
+  body.mobile-preview .trade-card__meta span,
+  body.mobile-preview .trade-card__meta b,
+  body.mobile-preview .trade-card__meta em {
+    padding: 2px 6px;
+    font-size: 10px;
+    font-weight: 600;
   }
 
   body.mobile-preview .trade-card h3 {
-    margin-top: 6px;
-    font-size: 16px;
-    line-height: 1.35;
+    grid-column: 2;
+    margin: 2px 0 0;
+    font-size: 15px;
+    font-weight: 600;
+    line-height: 1.25;
   }
 
   body.mobile-preview .trade-card small {
-    font-size: 12px;
+    display: none;
   }
 
   body.mobile-preview .trade-card__side {
     grid-column: 2;
-    align-items: start;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 2px 8px;
+    align-items: end;
     text-align: left;
   }
 
-  body.mobile-preview .trade-card__side p,
-  body.mobile-preview .trade-card__side span {
+  body.mobile-preview .trade-card__side p {
+    min-width: 0;
+    overflow: hidden;
+    color: #5f6f85;
     font-size: 12px;
+    font-weight: 500;
+    line-height: 1.25;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  body.mobile-preview .trade-card__game,
+  body.mobile-preview .trade-card__sep {
+    display: none;
+  }
+
+  body.mobile-preview .trade-card__side > span {
+    justify-self: end;
+    color: #5f6f85;
+    font-size: 12px;
+    font-weight: 600;
+    line-height: 1.25;
+    white-space: nowrap;
   }
 
   body.mobile-preview .trade-card strong {
-    font-size: 19px;
+    grid-column: 2;
+    justify-self: end;
+    color: #0056c8;
+    font-size: 18px;
+    font-weight: 900;
+    line-height: 1.1;
   }
 
   body.mobile-preview .trade-compose__body,
