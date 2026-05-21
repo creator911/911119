@@ -100,11 +100,17 @@ echo
 echo "==> Remote working tree"
 git status --short --branch
 
-if [ -n "`$(git status --porcelain)" ]; then
+if ! git diff --quiet || ! git diff --cached --quiet; then
   echo
-  echo "Remote working tree is not clean. Stop before pull."
-  echo "Fix or backup the files shown above, then rerun deploy."
+  echo "Remote tracked files have local changes. Stop before pull."
+  echo "Commit, revert, or backup the tracked files shown above, then rerun deploy."
   exit 20
+fi
+
+if [ -n "`$(git ls-files --others --exclude-standard)" ]; then
+  echo
+  echo "Remote has untracked files. They are shown above, but deploy will continue."
+  echo "If git pull finds a real file conflict, it will still stop safely."
 fi
 
 echo
