@@ -1,6 +1,6 @@
 const $ = (selector, root = document) => root.querySelector(selector);
 const $$ = (selector, root = document) => [...root.querySelectorAll(selector)];
-const isMobilePreview = document.body.classList.contains("mobile-preview");
+const isMobilePreview = () => document.body.classList.contains("mobile-preview");
 
 async function post(url, data) {
   const res = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data) });
@@ -98,11 +98,13 @@ if (focusChargeAccount) {
 function initMobilePreviewGames() {
   const grid = $(".games-grid");
   if (!grid) return;
+  if (grid.dataset.mobileGamesReady === "true") return;
   const cards = $$(".game-list-card", grid);
   if (!cards.length) return;
+  grid.dataset.mobileGamesReady = "true";
   const countTarget = $("[data-mobile-game-count]");
   const filterInput = $("[data-mobile-game-filter]");
-  const step = 24;
+  const step = 48;
   let visibleLimit = step;
   let query = "";
   const more = document.createElement("button");
@@ -140,6 +142,8 @@ function initMobilePreviewGames() {
 }
 
 function initMobilePreviewCollisionGuards() {
+  if (document.body.dataset.mobileCollisionReady === "true") return;
+  document.body.dataset.mobileCollisionReady = "true";
   const widgets = $$("#chatWidget, #directChatWidget");
   const syncChatState = () => {
     document.body.classList.toggle("mobile-chat-open", widgets.some((item) => item.classList.contains("open")));
@@ -208,13 +212,14 @@ function initMobilePreviewSelects() {
 }
 
 function initMobilePreviewUx() {
-  if (!isMobilePreview) return;
+  if (!isMobilePreview()) return;
   initMobilePreviewGames();
   initMobilePreviewCollisionGuards();
   initMobilePreviewSelects();
 }
 
 initMobilePreviewUx();
+window.addEventListener("itemzone:mobile-preview-change", initMobilePreviewUx);
 
 document.addEventListener("mousedown", (event) => {
   if (event.target.closest(".trade-editor-toolbar button")) event.preventDefault();

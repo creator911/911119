@@ -1937,10 +1937,30 @@ function tradeDetailPage(user, db, type, postId) {
 
 function layout(title, user, content, page = "home") {
   const pageTitle = page === "home" && title === "홈" ? "아이템존 - 신뢰의 No.1" : `${title} - 아이템존`;
-  const previewClass = MOBILE_PREVIEW ? " class=\"mobile-preview\"" : "";
-  const previewCss = MOBILE_PREVIEW ? "\n  <link rel=\"stylesheet\" href=\"/mobile-preview.css?v=mobile-preview-14\">" : "";
+  const previewClass = MOBILE_PREVIEW ? " class=\"mobile-preview mobile-preview-debug\"" : "";
+  const previewCss = MOBILE_PREVIEW
+    ? "\n  <link rel=\"stylesheet\" href=\"/mobile-preview.css?v=mobile-preview-26\">"
+    : "\n  <link rel=\"stylesheet\" href=\"/mobile-preview.css?v=mobile-preview-26\" media=\"(max-width: 900px)\">";
   const appScript = MOBILE_PREVIEW ? "/app.js?v=mobile-preview-3" : "/app.js";
   const appScriptAttrs = MOBILE_PREVIEW ? "" : " defer";
+  const mobilePreviewScript = `<script>
+  (() => {
+    const force = ${MOBILE_PREVIEW ? "true" : "false"};
+    const query = "(max-width: 900px)";
+    const sync = () => {
+      const on = force || window.matchMedia(query).matches;
+      document.body.classList.toggle("mobile-preview", on);
+      window.dispatchEvent(new CustomEvent("itemzone:mobile-preview-change", { detail: { active: on } }));
+    };
+    window.__itemzoneSyncMobilePreview = sync;
+    sync();
+    if (!force) {
+      const media = window.matchMedia(query);
+      if (media.addEventListener) media.addEventListener("change", sync);
+      else if (media.addListener) media.addListener(sync);
+    }
+  })();
+  </script>`;
   return `<!doctype html>
 <html lang="ko">
 <head>
@@ -1951,6 +1971,7 @@ function layout(title, user, content, page = "home") {
   <link rel="stylesheet" href="/styles.css">${previewCss}
 </head>
 <body${previewClass} data-page="${page}" data-user="${user ? user.id : ""}" data-role="${user ? user.role : ""}">
+  ${mobilePreviewScript}
   ${header(user)}
   ${content}
   <script src="${appScript}"${appScriptAttrs}></script>

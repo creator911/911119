@@ -1,10 +1,10 @@
 /*
-  Mobile preview-only stylesheet.
-  Loaded only when ITEMZONE_MOBILE_PREVIEW=true.
-  Keep production PC styles in public/styles.css untouched until approval.
+  Mobile UX stylesheet.
+  Active only when body.mobile-preview is present.
+  Keep production PC styles in public/styles.css untouched.
 */
 
-body.mobile-preview::before {
+body.mobile-preview.mobile-preview-debug::before {
   content: "MOBILE PREVIEW";
   position: fixed;
   left: 10px;
@@ -305,6 +305,20 @@ body.mobile-preview::before {
     border-radius: 12px;
   }
 
+  body.mobile-preview .game-detail-hero > div {
+    align-self: end;
+    transform: translateY(3px);
+  }
+
+  body.mobile-preview .game-detail-hero > div span {
+    display: none;
+  }
+
+  body.mobile-preview .game-detail-hero > div p {
+    margin: 0 0 3px;
+    line-height: 1.05;
+  }
+
   body.mobile-preview .game-detail-hero > img,
   body.mobile-preview .trade-compose__hero img {
     width: 64px;
@@ -360,6 +374,21 @@ body.mobile-preview::before {
     min-height: 40px;
     flex: 0 0 auto;
     white-space: nowrap;
+  }
+
+  body.mobile-preview .trade-compose__body .segmented {
+    overflow: visible;
+  }
+
+  body.mobile-preview .trade-compose__body .segmented label {
+    flex: 0 1 auto;
+    min-width: 0;
+  }
+
+  body.mobile-preview .trade-compose__body .segmented span {
+    min-height: 40px;
+    padding: 0 12px;
+    font-size: 14px;
   }
 
   body.mobile-preview .trade-card {
@@ -1040,30 +1069,41 @@ body.mobile-preview::before {
   }
 
   body.mobile-preview .game-list-card {
+    grid-template-rows: auto 24px;
     min-width: 0;
+    min-height: 0;
     overflow: hidden;
+    border-color: #e2e7ee;
     border-radius: 8px;
+    background: #f4f6f8;
   }
 
   body.mobile-preview .game-list-card[hidden] {
     display: none !important;
   }
 
+  body.mobile-preview .game-list-card::after {
+    background: #f4f6f8;
+  }
+
   body.mobile-preview .game-list-card img {
     width: 100%;
+    height: auto;
+    min-height: 0;
     aspect-ratio: 1 / 1;
     object-fit: cover;
   }
 
   body.mobile-preview .game-list-card span {
-    height: 26px;
+    height: 24px;
     min-height: 0;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    padding: 2px 3px;
-    font-size: 10.5px;
-    line-height: 1.1;
+    display: block;
+    padding: 0 4px;
+    border-top-color: #e2e7ee;
+    background: #f4f6f8;
+    font-size: 12px;
+    font-weight: 800;
+    line-height: 24px;
     word-break: keep-all;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -1241,7 +1281,31 @@ body.mobile-preview::before {
   }
 
   body.mobile-preview .trade-compose__hero {
+    position: relative;
+    min-height: 100px;
+    padding: 14px 16px;
     margin-bottom: 10px;
+  }
+
+  body.mobile-preview .trade-compose__hero > div {
+    padding-right: 108px;
+  }
+
+  body.mobile-preview .trade-compose__hero p {
+    white-space: nowrap;
+    font-size: 14px;
+    line-height: 1.05;
+  }
+
+  body.mobile-preview .trade-compose__hero h1 {
+    margin-top: 2px;
+    line-height: 1.05;
+  }
+
+  body.mobile-preview .trade-compose__hero span {
+    display: block;
+    margin-top: 2px;
+    line-height: 1;
   }
 
   body.mobile-preview .trade-compose__actions {
@@ -1543,7 +1607,7 @@ body.mobile-preview::before {
     place-items: center;
     min-height: 100%;
     margin: 0;
-    font-size: 11px;
+    font-size: 13.2px;
     line-height: 1;
   }
 
@@ -1557,6 +1621,12 @@ body.mobile-preview::before {
     color: #172033;
     background: #f3f7fc;
     border-color: #e4ebf5;
+  }
+
+  body.mobile-preview .main-menu .nav-link[data-nav="games"] {
+    color: #fff;
+    background: #111827;
+    border-color: #111827;
   }
 
   body.mobile-preview .mobile-select {
@@ -1897,5 +1967,95 @@ body.mobile-preview::before {
     min-height: 27px;
     padding: 0 6px;
     font-size: 10.5px;
+  }
+}
+
+@media (max-width: 900px) {
+  body.mobile-preview .trade-detail-page {
+    padding-bottom: calc(176px + env(safe-area-inset-bottom));
+  }
+
+  body.mobile-preview .trade-detail-action {
+    top: auto;
+    bottom: calc(var(--mobile-tabbar-h) + env(safe-area-inset-bottom));
+    align-items: start;
+    align-content: start;
+    grid-template-rows: auto auto;
+    gap: 7px;
+    padding: 8px 10px;
+    max-height: 176px;
+    overflow: hidden;
+  }
+
+  body.mobile-preview .trade-detail-action dl {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 7px;
+    margin: 0;
+  }
+
+  body.mobile-preview .trade-detail-action dl div {
+    min-height: 58px;
+    padding: 8px 9px;
+    align-content: center;
+  }
+
+  body.mobile-preview .trade-detail-action dt {
+    font-size: 11px;
+  }
+
+  body.mobile-preview .trade-detail-action dd,
+  body.mobile-preview .trade-detail-action dl div:first-child dd {
+    font-size: 15px;
+  }
+
+  body.mobile-preview .trade-detail-buttons {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 7px;
+  }
+
+  body.mobile-preview .trade-detail-buttons > *,
+  body.mobile-preview .trade-detail-buttons button,
+  body.mobile-preview .trade-detail-buttons a {
+    min-height: 40px;
+  }
+
+  body.mobile-preview .trade-detail-buttons em {
+    min-height: 32px;
+    font-size: 12px;
+  }
+
+  body.mobile-preview .trade-compose__hero > a {
+    position: absolute;
+    top: auto;
+    right: 16px;
+    bottom: 22px;
+    grid-column: auto;
+    grid-row: auto;
+    width: 96px;
+    min-width: 86px;
+    max-width: 96px;
+    min-height: 32px;
+    justify-self: auto;
+    align-self: auto;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-top: 0;
+    padding: 0 12px;
+    font-size: 12.5px;
+    line-height: 1;
+    white-space: nowrap;
+  }
+
+  body.mobile-preview[data-page="trade"] .chat-fab,
+  body.mobile-preview[data-page="trade"] .direct-chat-fab,
+  body.mobile-preview[data-page="point"] .chat-fab,
+  body.mobile-preview[data-page="point"] .direct-chat-fab {
+    bottom: calc(var(--mobile-tabbar-h) + 14px + env(safe-area-inset-bottom));
+  }
+
+  body.mobile-preview:has(.trade-detail-page) .chat-fab,
+  body.mobile-preview:has(.trade-detail-page) .direct-chat-fab {
+    display: none;
   }
 }
