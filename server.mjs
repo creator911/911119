@@ -890,6 +890,49 @@ function tradeDisplayMember(db, post) {
   };
 }
 
+function firstFilled(...values) {
+  for (const value of values) {
+    if (value === null || value === undefined) continue;
+    const text = String(value).trim();
+    if (text) return text;
+  }
+  return "";
+}
+
+function tradeShownMember(db, post) {
+  const fallback = tradeDisplayMember(db, post);
+  const detail = post && typeof post.detail === "object" ? post.detail : {};
+  const list = post && typeof post.list === "object" ? post.list : {};
+  return {
+    nickname: firstFilled(
+      post.displayNickname,
+      post.visibleNickname,
+      post.authorNickname,
+      post.sellerNickname,
+      post.buyerNickname,
+      post.nickname,
+      detail.authorNickname,
+      detail.nickname,
+      list.authorNickname,
+      list.nickname,
+      fallback.nickname
+    ),
+    displayGrade: firstFilled(
+      post.displayGrade,
+      post.visibleGrade,
+      post.authorGrade,
+      post.gradeName,
+      post.grade,
+      detail.authorGrade,
+      detail.grade,
+      list.authorGrade,
+      list.grade,
+      fallback.displayGrade
+    ),
+    user: fallback.user
+  };
+}
+
 function adminTradeStatusValue(type, state) {
   if (state === "progress") return type === "sell" ? "판매 진행중" : "구매 진행중";
   if (state === "done") return type === "sell" ? "판매완료" : "구매완료";
@@ -1602,6 +1645,39 @@ function adminPager(paged, params, pageKey, sizeKey, anchor = "") {
     <div class="admin-page-size">
       <a class="${paged.size === 10 ? "active" : ""}" href="${adminPageHref(params, { [pageKey]: 1, [sizeKey]: 10 }, anchor)}">10개</a>
       <a class="${paged.size === 100 ? "active" : ""}" href="${adminPageHref(params, { [pageKey]: 1, [sizeKey]: 100 }, anchor)}">100개</a>
+    </div>
+  </nav>`;
+}
+
+function adminRecentHref(params = {}, updates = {}) {
+  const next = { ...params, ...updates };
+  const query = new URLSearchParams({
+    page: String(next.page || 1),
+    size: String(pageSize(next.size))
+  });
+  return `/admin_read?${query.toString()}`;
+}
+
+function adminRecentPager(paged, params = {}) {
+  const prev = paged.page > 1
+    ? `<a href="${adminRecentHref(params, { page: paged.page - 1 })}">이전</a>`
+    : `<span>이전</span>`;
+  const next = paged.page < paged.totalPages
+    ? `<a href="${adminRecentHref(params, { page: paged.page + 1 })}">다음</a>`
+    : `<span>다음</span>`;
+  const maxNumbers = 20;
+  const pageStart = Math.max(1, Math.min(paged.page - Math.floor(maxNumbers / 2), paged.totalPages - maxNumbers + 1));
+  const pageEnd = Math.min(paged.totalPages, pageStart + maxNumbers - 1);
+  const numbers = Array.from({ length: pageEnd - pageStart + 1 }, (_, index) => pageStart + index)
+    .map((page) => page === paged.page
+      ? `<b class="active-page">${page}</b>`
+      : `<a href="${adminRecentHref(params, { page })}">${page}</a>`)
+    .join("");
+  return `<nav class="admin-pager admin-recent-pager">
+    <div>${prev}<div class="admin-page-numbers">${numbers}</div>${next}<small>총 ${paged.total.toLocaleString()}개</small></div>
+    <div class="admin-page-size">
+      <a class="${paged.size === 10 ? "active" : ""}" href="${adminRecentHref(params, { page: 1, size: 10 })}">10개</a>
+      <a class="${paged.size === 100 ? "active" : ""}" href="${adminRecentHref(params, { page: 1, size: 100 })}">100개</a>
     </div>
   </nav>`;
 }
@@ -2329,7 +2405,7 @@ function pointPage(user, db, type) {
       <h1>${charge ? "충전전용계좌" : "본인 계좌 출금"}</h1>
       <div class="mileage-feature-grid">
         <article><i>₩</i><span>마일리지 종류</span><b>${charge ? "출금가능 마일리지" : "일반 마일리지"}</b></article>
-        <article><i>%</i><span>${charge ? "충전 수수료" : "출금 수수료"}</span><b>0원</b></article>
+        <article><i>${charge ? "+" : "-"}</i><span>${charge ? "최소 충전 금액" : "최소 출금 금액"}</span><b>${charge ? "10,000원" : "2,000원"}</b></article>
         <article><i>↯</i><span>소요 시간</span><b>${charge ? "5분이내" : "30분 이내"}</b></article>
       </div>
       ${charge ? `<ul class="mileage-guide">
@@ -2459,6 +2535,52 @@ function myPage(user, db) {
   </main>`, "mypage");
 }
 
+function adminRecentPage(user, db, paging = {}) {
+  const params = {
+    page: pageNumber(paging.page),
+    size: pageSize(paging.size)
+  };
+  const posts = allTrades(db)
+    .slice()
+    .sort((a, b) => String(b.createdAt || "").localeCompare(String(a.createdAt || "")));
+  const paged = pagedItems(posts, params.page, params.size);
+  params.page = paged.page;
+  const rows = paged.items.map((post) => {
+    const member = tradeShownMember(db, post);
+    const gameName = post.gameName || post.game || "-";
+    const title = post.title || "제목 없음";
+    return `<tr>
+      <td><span class="admin-recent-grade"><img src="${gradeAsset(member.displayGrade)}" alt="${esc(member.displayGrade)}"><b>${esc(member.displayGrade)}</b></span></td>
+      <td>${esc(member.nickname)}</td>
+      <td>${esc(gameName)}</td>
+      <td><a href="${tradeHref(post)}">${esc(title)}</a>${post.adminManaged ? `<em>[관리자]</em>` : ""}</td>
+      <td>${won(post.price)}</td>
+      <td><input type="checkbox" data-admin-recent-trade value="${esc(post.type)}:${esc(post.id)}" aria-label="삭제 선택"></td>
+    </tr>`;
+  }).join("");
+  const pager = adminRecentPager(paged, params);
+  return layout("최근작성글", user, `<main class="admin-page admin-recent-page">
+    <h1>최근작성글</h1>
+    <nav class="admin-tools">
+      <a href="/admin">관리자페이지</a>
+      <a href="/admin_write">글 작성(관리자권한)</a>
+      <a href="/admin_read">&#52572;&#44540;&#51089;&#49457;&#44544;</a>
+    </nav>
+    <section class="panel table-panel admin-recent-panel">
+      <div class="panel-head">
+        <h2>최근 올라온 글</h2>
+        <label class="admin-recent-check-all"><input type="checkbox" data-admin-recent-check-all> 전체선택</label>
+      </div>
+      <table>
+        <thead><tr><th>등급</th><th>닉네임</th><th>게임이름</th><th>제목</th><th>가격</th><th>선택</th></tr></thead>
+        <tbody>${rows || "<tr><td colspan='6'>등록된 글이 없습니다.</td></tr>"}</tbody>
+      </table>
+      ${pager}
+      <div class="admin-recent-actions"><button type="button" data-admin-recent-delete>선택 삭제</button></div>
+    </section>
+  </main>`, "admin_read");
+}
+
 function adminPage(user, db, paging = {}) {
   const editCell = (name, value, type = "text") => `<div class="admin-edit-field" data-admin-field="${name}"><span>${esc(value || "-")}</span><input name="${name}" type="${type}" value="${esc(value || "")}" hidden><button type="button" data-admin-edit="${name}">수정</button></div>`;
   const onlineEditCell = (name, value, online, type = "text") => `<div class="admin-edit-field ${online ? "is-online" : ""}" data-admin-field="${name}"><span>${esc(value || "-")}</span><input name="${name}" type="${type}" value="${esc(value || "")}" hidden><button type="button" data-admin-edit="${name}">수정</button></div>`;
@@ -2524,6 +2646,7 @@ function adminPage(user, db, paging = {}) {
       <button type="button" data-admin-panel-toggle="notice" ${editingNotice ? "class=\"active\"" : ""}>공지사항관리</button>
       <button type="button" data-admin-panel-toggle="ip">IP관리</button>
       <a href="/admin_write">글 작성(관리자권한)</a>
+      <a href="/admin_read">&#52572;&#44540;&#51089;&#49457;&#44544;</a>
     </nav>
     <section class="admin-grid">
       <form class="panel account-admin-form admin-collapsible-panel" data-admin-panel="account" data-form="site" hidden><h2>계좌번호 등록</h2>
@@ -2893,6 +3016,34 @@ async function api(req, res, db, user, pathname) {
       audit(db, user, "TRADE_DELETE", removed.id);
       await writeDb(db);
       return send(res, 200, { ok: true, redirect: removed.gameSlug ? `/games/${encodeURIComponent(removed.gameSlug)}` : "/games" });
+    }
+    if (pathname === "/api/admin/trades/delete" && req.method === "POST") {
+      if (!protect(user, "admin")) return send(res, 403, { error: "\uad00\ub9ac\uc790 \uad8c\ud55c\uc774 \ud544\uc694\ud569\ub2c8\ub2e4." });
+      const data = await body(req);
+      const targets = Array.isArray(data.trades) ? data.trades : [];
+      if (!targets.length) return send(res, 400, { error: "\uc0ad\uc81c\ud560 \uae00\uc744 \uc120\ud0dd\ud558\uc138\uc694." });
+      const found = [];
+      for (const raw of targets) {
+        const [rawType, ...idParts] = String(raw || "").split(":");
+        const type = rawType === "buy" ? "buy" : rawType === "sell" ? "sell" : "";
+        const postId = idParts.join(":");
+        if (!type || !postId) return send(res, 400, { error: "\uc0ad\uc81c \ub300\uc0c1 \uc815\ubcf4\uac00 \uc62c\ubc14\ub974\uc9c0 \uc54a\uc2b5\ub2c8\ub2e4." });
+        const collection = tradeCollection(db, type);
+        const index = collection.findIndex((item) => item.id === postId);
+        if (index < 0) return send(res, 404, { error: "\uc0ad\uc81c\ud560 \uae00\uc744 \ucc3e\uc744 \uc218 \uc5c6\uc2b5\ub2c8\ub2e4." });
+        found.push({ type, collection, index, post: collection[index] });
+      }
+      for (const item of found) {
+        const refund = refundTradeEscrow(db, item.post, item.type);
+        if (!refund.ok) return send(res, 400, { error: refund.error });
+      }
+      const ordered = found.slice().sort((a, b) => b.index - a.index);
+      for (const item of ordered) {
+        const [removed] = item.collection.splice(item.index, 1);
+        audit(db, user, "ADMIN_TRADE_BULK_DELETE", removed.id);
+      }
+      await writeDb(db);
+      return send(res, 200, { ok: true, deleted: found.length });
     }
     if (pathname === "/api/trade/status" && req.method === "POST") {
       if (!protect(user, "member")) return send(res, 401, { error: "로그인이 필요합니다." });
@@ -3517,6 +3668,10 @@ async function router(req, res) {
     noticeEdit: url.searchParams.get("noticeEdit") || ""
   })) : redirect(res, "/login");
   if (url.pathname === "/admin_write") return protect(user, "admin") ? send(res, 200, adminWritePage(user, db, url.searchParams.get("game") || "")) : redirect(res, "/login");
+  if (url.pathname === "/admin_read") return protect(user, "admin") ? send(res, 200, adminRecentPage(user, db, {
+    page: url.searchParams.get("page"),
+    size: url.searchParams.get("size")
+  })) : redirect(res, "/login");
   if (url.pathname === "/staff") return protect(user, "staff") ? send(res, 200, staffPage(user)) : redirect(res, "/login");
   if (url.pathname === "/terms") return send(res, 200, legalPage(user, "service"));
   if (url.pathname === "/trade-terms") return send(res, 200, legalPage(user, "trade"));

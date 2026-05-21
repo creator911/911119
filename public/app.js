@@ -176,6 +176,32 @@ function toggleMemberChat() {
 }
 
 document.addEventListener("click", async (event) => {
+  const adminRecentCheckAll = event.target.closest("[data-admin-recent-check-all]");
+  if (adminRecentCheckAll) {
+    $$("[data-admin-recent-trade]").forEach((checkbox) => {
+      checkbox.checked = adminRecentCheckAll.checked;
+    });
+    return;
+  }
+  const adminRecentDelete = event.target.closest("[data-admin-recent-delete]");
+  if (adminRecentDelete) {
+    event.preventDefault();
+    const trades = $$("[data-admin-recent-trade]:checked").map((checkbox) => checkbox.value);
+    if (!trades.length) {
+      alert("삭제할 글을 선택하세요.");
+      return;
+    }
+    if (!confirm(`선택한 글 ${trades.length}개를 삭제할까요?`)) return;
+    adminRecentDelete.disabled = true;
+    try {
+      await post("/api/admin/trades/delete", { trades });
+      location.reload();
+    } catch (error) {
+      alert(error.message);
+      adminRecentDelete.disabled = false;
+    }
+    return;
+  }
   const tradeDelete = event.target.closest("[data-trade-delete]");
   if (tradeDelete) {
     event.preventDefault();
