@@ -2079,7 +2079,7 @@ function homePage(user, db) {
           <h2>안전한 게임 거래의 시작</h2>
           <label>아이디<input name="username" placeholder="아이디를 입력하세요" required></label>
           <label>비밀번호<input name="password" type="password" placeholder="비밀번호를 입력하세요" required></label>
-          <div class="login-row"><label class="auto-login"><input type="checkbox" name="autoLogin"> 자동로그인</label><a href="/support">아이디/비밀번호 찾기</a></div>
+          <div class="login-row"><label class="auto-login"><input type="checkbox" name="autoLogin"> 자동로그인</label><a aria-disabled="true">아이디/비밀번호 찾기</a></div>
           <button>로그인</button>
           <p>아직 계정이 없으신가요? <a href="/signup">회원가입</a></p>
           <span class="form-message"></span>
@@ -2196,7 +2196,7 @@ function authPage(user, mode) {
       <h1>${isSignup ? "회원가입" : "로그인"}</h1>
       <input name="username" placeholder="아이디" required>
       <input name="password" type="password" placeholder="비밀번호" required>
-      <div class="auth-links"><a href="/support" data-open-chat>아이디/비밀번호 찾기</a></div>
+      <div class="auth-links"><a aria-disabled="true">아이디/비밀번호 찾기</a></div>
       <button>${isSignup ? "가입하기" : "로그인"}</button>
       <p class="auth-join">아직 계정이 없으신가요? <a href="/signup">회원가입</a></p>
       <p class="form-message"></p>
