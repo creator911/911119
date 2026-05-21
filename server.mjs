@@ -21,6 +21,7 @@ const DB_BACKUP_KEEP = 30;
 const DATABASE_URL = MOBILE_PREVIEW ? "" : (process.env.ITEMZONE_DATABASE_URL || process.env.DATABASE_URL || "");
 const DATABASE_SSL = process.env.ITEMZONE_DATABASE_SSL === "true";
 const USE_POSTGRES = Boolean(DATABASE_URL);
+const PG_CACHE_NORMALIZE_INTERVAL_MS = 60 * 1000;
 const PG_COLLECTIONS = [
   "users",
   "games",
@@ -44,6 +45,7 @@ let jsonDbCache = null;
 let pgPoolPromise = null;
 let pgSchemaReady = false;
 let pgCache = null;
+let pgCacheNormalizedAt = 0;
 let pgSnapshots = null;
 
 const DISPLAY_GRADES = ["브론즈", "실버", "골드", "플레티넘", "다이아", "마스터", "챌린저"];
@@ -290,6 +292,7 @@ async function writePostgresDb(db) {
     }
     await client.query("COMMIT");
     pgCache = db;
+    pgCacheNormalizedAt = Date.now();
     capturePgSnapshots(db);
   } catch (error) {
     await client.query("ROLLBACK").catch(() => {});
@@ -301,8 +304,10 @@ async function writePostgresDb(db) {
 
 async function readPostgresDb() {
   if (pgCache) {
+    if (Date.now() - pgCacheNormalizedAt < PG_CACHE_NORMALIZE_INTERVAL_MS) return pgCache;
     const normalized = normalizeDb(pgCache);
-    if (normalized.changed) await writeDb(normalized.db);
+    pgCacheNormalizedAt = Date.now();
+    if (normalized.changed) await writePostgresDb(normalized.db);
     pgCache = normalized.db;
     return pgCache;
   }
@@ -334,6 +339,7 @@ async function readPostgresDb() {
     const normalized = normalizeDb(db);
     if (normalized.changed) await writePostgresDb(normalized.db);
     pgCache = normalized.db;
+    pgCacheNormalizedAt = Date.now();
     capturePgSnapshots(pgCache);
     return pgCache;
   } finally {
@@ -3651,10 +3657,10 @@ async function serveStatic(req, res, pathname) {
 
 async function router(req, res) {
   const url = requestUrl(req);
+  if (await serveStatic(req, res, url.pathname)) return;
   const db = await readDb();
   const requestIp = clientIp(req);
   if (isIpBanned(db, requestIp)) return sendIpBlocked(req, res);
-  if (await serveStatic(req, res, url.pathname)) return;
   const hadSessionCookie = Boolean(parseCookies(req).session);
   const user = await currentUser(req, db);
   if (hadSessionCookie && !user && !url.pathname.startsWith("/api/") && !["/", "/login", "/signup"].includes(url.pathname)) {
