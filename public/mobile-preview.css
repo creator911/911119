@@ -100,12 +100,32 @@ body.mobile-preview.mobile-preview-debug::before {
   }
 
   body.mobile-preview .account-image-link {
-    padding: 0;
-    background: transparent;
+    min-height: 30px !important;
+    padding: 0 4px !important;
+    background: transparent !important;
+    box-shadow: none;
+    transform: none;
   }
 
   body.mobile-preview .account-image-link img {
-    height: 42px;
+    display: none;
+  }
+
+  body.mobile-preview .account-image-link::before {
+    content: attr(aria-label);
+    display: block;
+    font-size: 13px;
+    font-weight: 900;
+    line-height: 30px;
+    white-space: nowrap;
+  }
+
+  body.mobile-preview .account-image-link[href="/login"]::before {
+    color: #0867db;
+  }
+
+  body.mobile-preview .account-image-link[href="/signup"]::before {
+    color: #16a34a;
   }
 
   body.mobile-preview .search {
@@ -307,7 +327,7 @@ body.mobile-preview.mobile-preview-debug::before {
 
   body.mobile-preview .game-detail-hero > div {
     align-self: end;
-    transform: translateY(3px);
+    transform: translateY(-3px);
   }
 
   body.mobile-preview .game-detail-hero > div span {
@@ -1534,8 +1554,14 @@ body.mobile-preview.mobile-preview-debug::before {
     place-items: center;
     padding: 0 8px;
     font-size: 11px;
+    font-weight: 900;
     line-height: 1;
     white-space: nowrap;
+  }
+
+  body.mobile-preview .account-image-link[href="/login"]::before,
+  body.mobile-preview .account-image-link[href="/signup"]::before {
+    font-weight: 900;
   }
 
   body.mobile-preview .account-image-link img {

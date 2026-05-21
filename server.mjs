@@ -2000,7 +2000,7 @@ function header(user) {
         <button class="search-icon" type="submit" aria-label="검색"><img src="/assets/header/search-icon.png" alt=""></button>
       </form>
       <nav class="account">
-        ${user ? `<b>${user.nickname}</b><span>${user.displayGrade}</span><a href="/mypage">마이페이지</a><button data-action="logout">로그아웃</button>` : `<a class="account-image-link" href="/login" aria-label="로그인"><img src="/assets/header/login-button.png" alt="로그인"></a><a class="account-image-link" href="/signup" aria-label="회원가입"><img src="/assets/header/signup-button.png" alt="회원가입"></a>`}
+        ${user ? `<b>${user.nickname}</b><span>${user.displayGrade}</span><a href="/mypage">마이페이지</a><button data-action="logout">로그아웃</button>` : `<a class="account-image-link" href="/login" aria-label="로그인"><img src="/assets/header/login2.png" alt="로그인"></a><a class="account-image-link" href="/signup" aria-label="회원가입"><img src="/assets/header/signup2.png" alt="회원가입"></a>`}
         ${canAdmin(user) ? `<a href="/admin">관리자</a>` : ""}
         ${canStaff(user) ? `<a href="/staff">상담사</a>` : ""}
       </nav>
@@ -2290,7 +2290,7 @@ function gameDetailPage(user, db, slug, filters = {}) {
   return layout(game.name, user, `<main class="game-detail-page" ${gameThemeStyle(game)}>
     <section class="game-detail-hero">
       <img src="${gameImage(game)}" alt="">
-      <div><p>게임별 통합 거래</p><h1>${esc(game.name)}</h1><span>${posts.length}개의 거래글</span></div>
+      <div><p>게임별 통합 거래</p><h1>${esc(game.name)}</h1></div>
       <nav><a class="sell" href="/sell?game=${encodeURIComponent(game.slug)}">판매등록</a><a class="buy" href="/buy?game=${encodeURIComponent(game.slug)}">구매등록</a></nav>
     </section>
     <section class="trade-board">

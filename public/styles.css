@@ -2786,14 +2786,25 @@ input:focus-visible {
 .account-image-link {
   min-height: 0 !important;
   padding: 0 !important;
-  border-radius: 999px !important;
+  border-radius: 7px !important;
   background: transparent !important;
   line-height: 1;
+  transition: transform .16s ease, filter .16s ease, box-shadow .16s ease;
 }
 .account-image-link img {
   display: block;
   width: auto;
-  height: 58px;
+  height: 48px;
+}
+.account-image-link:hover,
+.account-image-link:focus-visible {
+  transform: translateY(-2px);
+  filter: brightness(1.03);
+  box-shadow: 0 10px 20px rgba(8, 103, 219, .14);
+}
+.account-image-link:active {
+  transform: translateY(0) scale(.985);
+  filter: brightness(.99);
 }
 .top-inner {
   grid-template-columns: 300px minmax(360px, 1fr) max-content;
@@ -3209,6 +3220,10 @@ input:focus-visible {
   height: 84px;
   border-radius: 16px;
   object-fit: cover;
+}
+.game-detail-page .game-detail-hero > div {
+  align-self: end;
+  transform: translateY(-3px);
 }
 .game-detail-hero nav {
   display: flex;
