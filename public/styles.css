@@ -2681,7 +2681,7 @@ input:focus-visible {
 .account-image-link img {
   display: block;
   width: auto;
-  height: 48px;
+  height: 58px;
 }
 .top-inner {
   grid-template-columns: 300px minmax(360px, 1fr) max-content;
