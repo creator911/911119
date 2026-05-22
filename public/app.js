@@ -31,6 +31,16 @@ function unreadLabel(count = 0) {
   return value > 99 ? "99+" : String(value);
 }
 
+function formatAdminPointDisplays() {
+  $$('[data-admin-field="points"] span').forEach((span) => {
+    const raw = span.textContent.replace(/,/g, "").trim();
+    if (!raw || raw === "-") return;
+    const value = Number(raw);
+    if (!Number.isFinite(value)) return;
+    span.textContent = Math.floor(value).toLocaleString();
+  });
+}
+
 function setUnreadBadge(target, count = 0) {
   if (!target) return;
   const label = unreadLabel(count);
@@ -86,6 +96,7 @@ if (pendingTopMessage) {
 }
 loadTopNotifications().catch(() => {});
 setInterval(() => loadTopNotifications().catch(() => {}), 3000);
+formatAdminPointDisplays();
 
 const focusChargeAccount = sessionStorage.getItem("focusChargeAccount");
 if (focusChargeAccount) {
