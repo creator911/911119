@@ -1031,9 +1031,17 @@ td button { margin-right: 6px; min-height: 34px; }
 
 .admin-recent-page .admin-recent-panel th,
 .admin-recent-page .admin-recent-panel td {
-  padding: 10px 8px;
   font-size: 13px;
+  line-height: 1.25;
   vertical-align: middle;
+}
+
+.admin-recent-page .admin-recent-panel th {
+  padding: 8px 8px;
+}
+
+.admin-recent-page .admin-recent-panel td {
+  padding: 6px 8px;
 }
 
 .admin-recent-page .admin-recent-panel th:nth-child(1),
@@ -1077,8 +1085,8 @@ td button { margin-right: 6px; min-height: 34px; }
 }
 
 .admin-recent-grade img {
-  width: 24px;
-  height: 24px;
+  width: 20px;
+  height: 20px;
   object-fit: contain;
 }
 
@@ -1241,10 +1249,10 @@ td button { margin-right: 6px; min-height: 34px; }
 
 .admin-recent-panel input[type="checkbox"],
 .admin-recent-check-all input[type="checkbox"] {
-  width: 18px;
-  height: 18px;
-  min-width: 18px;
-  min-height: 18px;
+  width: 16px;
+  height: 16px;
+  min-width: 16px;
+  min-height: 16px;
   margin: 0;
   accent-color: #075bdc;
 }
