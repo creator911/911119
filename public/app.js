@@ -1842,6 +1842,10 @@ function bindStaffScrollLock(log) {
   log.addEventListener("scroll", () => updateStaffScrollLock(log), { passive: true });
 }
 
+function staffHasOpenEditor() {
+  return Boolean($(".staff-inline-editor:not([hidden])"));
+}
+
 loadStaffRooms = async function loadStaffRoomsV2() {
   const normalList = $("#staffRooms");
   const pinnedList = $("#staffPinnedRooms");
@@ -2171,7 +2175,7 @@ if (document.body.dataset.page === "staff") {
   renderStaffMemberPreview();
   setInterval(() => {
     loadStaffRooms();
-    if (activeRoom) loadStaffMessages();
+    if (activeRoom && !staffHasOpenEditor()) loadStaffMessages();
   }, 2500);
 }
 
