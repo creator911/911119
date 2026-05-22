@@ -1192,11 +1192,17 @@ td button { margin-right: 6px; min-height: 34px; }
   gap: 4px;
 }
 
+.admin-member-panel .admin-row-save {
+  min-width: 66px;
+  padding: 0 10px;
+}
+
 .admin-member-panel .admin-user-delete {
-  width: 100%;
+  width: 50%;
+  min-width: 58px;
   min-height: 28px;
   margin: 0;
-  padding: 0 7px;
+  padding: 0 4px;
   border-radius: 6px;
   background: #dc2626;
   color: #fff;
