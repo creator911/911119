@@ -822,6 +822,20 @@ function noticeDate(value, detail = false) {
   return date.toISOString().slice(0, 10);
 }
 
+function tradeDisplayTime(value) {
+  const date = new Date(value || now());
+  const safeDate = Number.isNaN(date.getTime()) ? new Date() : date;
+  const parts = new Intl.DateTimeFormat("en-GB", {
+    timeZone: "Asia/Seoul",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false
+  }).formatToParts(safeDate);
+  const hour = parts.find((part) => part.type === "hour")?.value || String(safeDate.getHours()).padStart(2, "0");
+  const minute = parts.find((part) => part.type === "minute")?.value || String(safeDate.getMinutes()).padStart(2, "0");
+  return `${hour}:${minute}`;
+}
+
 function noticeCreatedAt(value) {
   const raw = String(value || "").trim();
   if (!raw) return now();
@@ -1701,7 +1715,7 @@ function renderTradeCard(post, db, owner = false) {
     <div class="trade-card__main">
       <div class="trade-card__meta"><span class="${post.type}">${sideLabel}</span><b>${esc(tradeKindLabel(post.tradeKind || post.category))}</b><b>${esc(post.unit || "일반")}</b>${displayStatus ? `<em class="${tradeStatusClass(displayStatus)}">[${esc(displayStatus)}]</em>` : ""}</div>
       <h3>${esc(post.title || "제목 없음")}</h3>
-      <small>${esc(displayMember.nickname)} · ${new Date(post.createdAt).toLocaleDateString("ko-KR")}</small>
+      <small>${esc(displayMember.nickname)} · ${tradeDisplayTime(post.createdAt)}</small>
     </div>
     <div class="trade-card__side"><p><bdi class="trade-card__game">${esc(post.gameName || post.game)}</bdi><bdi class="trade-card__sep"> · </bdi><bdi class="trade-card__server">${esc(post.server || "서버전체")}</bdi></p>${unitPrice ? `<span>1개당 ${won(unitPrice)}</span>` : ""}<strong>${won(post.price)}</strong></div>
     ${owner ? `<label class="status-update">상태<select data-trade-status="${esc(post.id)}" data-trade-type="${post.type}">${statusOptions.map((item) => `<option value="${esc(item)}" ${item === status ? "selected" : ""}>${esc(tradeStatusLabel(item, post.type) || item)}</option>`).join("")}</select></label>` : ""}
@@ -2006,7 +2020,7 @@ function tradeDetailPage(user, db, type, postId) {
           ${displayStatus ? `<em class="${tradeStatusClass(displayStatus)}">[${esc(displayStatus)}]</em>` : ""}
         </header>
         <h1>${esc(post.title || "제목 없음")}</h1>
-        <div class="trade-detail-code"><span>#${esc(detailId)}</span><time>${new Date(post.createdAt).toLocaleString("ko-KR")}</time></div>
+        <div class="trade-detail-code"><span>#${esc(detailId)}</span><time>${tradeDisplayTime(post.createdAt)}</time></div>
         <dl class="trade-detail-summary" aria-label="거래 요약">
           <div><dt>${quantityLabel}</dt><dd>${esc(quantity)}</dd></div>
           <div><dt>${amountLabel}</dt><dd>${won(post.price)}</dd></div>
@@ -2442,7 +2456,7 @@ function legacySimpleRenderTradeCard(post, db, owner = false) {
     <h3>${esc(post.title)}</h3>
     <p>${esc(post.gameName || post.game)} · ${esc(post.server || "서버전체")}</p>
     <strong>${won(post.price)}</strong>
-    <small>${esc(member?.nickname || "회원")} · ${new Date(post.createdAt).toLocaleDateString("ko-KR")}</small>
+    <small>${esc(member?.nickname || "회원")} · ${tradeDisplayTime(post.createdAt)}</small>
     ${owner ? `<label class="status-update">상태<select data-trade-status="${esc(post.id)}" data-trade-type="${post.type}">${statusOptions.map((status) => `<option value="${esc(status)}" ${status === post.status ? "selected" : ""}>${esc(tradeStatusLabel(status, post.type) || status)}</option>`).join("")}</select></label>` : ""}
   </article>`;
 }
