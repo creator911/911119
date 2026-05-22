@@ -791,6 +791,82 @@ if (globalSearchForm && globalSearchInput && globalSuggest) {
   });
 }
 
+const adminRecentSearchForm = $("[data-admin-recent-search]");
+if (adminRecentSearchForm) {
+  const adminRecentGameInput = $("[data-admin-recent-game-search]", adminRecentSearchForm);
+  const adminRecentGameValue = $("[data-admin-recent-game-value]", adminRecentSearchForm);
+  const adminRecentSuggest = $("[data-admin-recent-game-suggest]", adminRecentSearchForm);
+  const adminRecentSizeInput = $("input[name='size']", adminRecentSearchForm);
+  let adminRecentGameTimer = null;
+
+  const adminRecentSearchUrl = (q = adminRecentGameInput?.value.trim() || "", game = adminRecentGameValue?.value || "") => {
+    const query = new URLSearchParams();
+    query.set("page", "1");
+    query.set("size", adminRecentSizeInput?.value || new URLSearchParams(location.search).get("size") || "10");
+    if (q) query.set("q", q);
+    if (game) query.set("game", game);
+    return `/admin_read?${query.toString()}`;
+  };
+
+  const renderAdminRecentGameSuggestions = (games = [], title = "추천 검색어") => {
+    if (!adminRecentSuggest) return;
+    if (!games.length) {
+      adminRecentSuggest.innerHTML = `<b>${escapeHtml(title)}</b><p class="suggest-empty">검색 결과가 없습니다.</p>`;
+      adminRecentSuggest.classList.add("is-open");
+      return;
+    }
+    adminRecentSuggest.innerHTML = `<b>${escapeHtml(title)}</b><div class="admin-recent-suggest-list">${games.map((game) => `
+      <button type="button" data-admin-recent-game-select="${escapeAttr(game.slug)}" data-admin-recent-game-name="${escapeAttr(game.name)}">
+        <img src="${escapeAttr(game.imageUrl)}" alt="">
+        <span>${escapeHtml(game.name)}</span>
+      </button>
+    `).join("")}</div>`;
+    adminRecentSuggest.classList.add("is-open");
+  };
+
+  const loadAdminRecentGameSuggestions = async (query = "") => {
+    if (!adminRecentSuggest) return [];
+    const res = await fetch(`/api/search-games?q=${encodeURIComponent(query)}`);
+    if (!res.ok) return [];
+    const data = await res.json();
+    const games = data.games || [];
+    renderAdminRecentGameSuggestions(games, query ? "검색 결과" : "추천 검색어");
+    return games;
+  };
+
+  adminRecentGameInput?.addEventListener("focus", () => {
+    loadAdminRecentGameSuggestions(adminRecentGameInput.value.trim()).catch(() => {});
+  });
+  adminRecentGameInput?.addEventListener("input", () => {
+    if (adminRecentGameValue) adminRecentGameValue.value = "";
+    clearTimeout(adminRecentGameTimer);
+    adminRecentGameTimer = setTimeout(() => {
+      loadAdminRecentGameSuggestions(adminRecentGameInput.value.trim()).catch(() => {});
+    }, 120);
+  });
+  adminRecentGameInput?.addEventListener("keydown", (event) => {
+    if (event.key !== "Enter") return;
+    event.preventDefault();
+    location.href = adminRecentSearchUrl();
+  });
+  adminRecentSuggest?.addEventListener("click", (event) => {
+    const gameButton = event.target.closest("[data-admin-recent-game-select]");
+    if (!gameButton) return;
+    const name = gameButton.dataset.adminRecentGameName || "";
+    const slug = gameButton.dataset.adminRecentGameSelect || "";
+    if (adminRecentGameInput) adminRecentGameInput.value = name;
+    if (adminRecentGameValue) adminRecentGameValue.value = slug;
+    location.href = adminRecentSearchUrl(name, slug);
+  });
+  adminRecentSearchForm.addEventListener("submit", (event) => {
+    event.preventDefault();
+    location.href = adminRecentSearchUrl();
+  });
+  document.addEventListener("click", (event) => {
+    if (!event.target.closest("[data-admin-recent-search]")) adminRecentSuggest?.classList.remove("is-open");
+  });
+}
+
 function renderTradeGameSuggestions(picker, games, title = "추천 검색어") {
   const panel = $("[data-trade-game-suggest]", picker);
   if (!panel) return;

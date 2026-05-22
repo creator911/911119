@@ -116,12 +116,7 @@ function searchGameResults(db, query = "") {
   const q = normalizeSearch(query);
   const games = (db.games || []).filter((game) => game.visible !== false);
   const ranked = games.slice().sort((a, b) => Number(a.rank || 9999) - Number(b.rank || 9999));
-  const filtered = q ? ranked.filter((game) => {
-    const name = normalizeSearch(game.name);
-    const initials = searchInitials(game.name);
-    const group = normalizeSearch(game.initialGroup);
-    return name.includes(q) || initials.includes(q) || group === q;
-  }).sort((a, b) => {
+  const filtered = q ? ranked.filter((game) => gameMatchesSearch(game, q)).sort((a, b) => {
     const aName = normalizeSearch(a.name);
     const bName = normalizeSearch(b.name);
     const aInitials = searchInitials(a.name);
@@ -141,6 +136,15 @@ function searchGameResults(db, query = "") {
     imageUrl: game.imageUrl || game.localImageUrl || "/assets/games/game-1.svg",
     initialGroup: game.initialGroup || initialGroupFor(game.name)
   }));
+}
+
+function gameMatchesSearch(game = {}, query = "") {
+  const q = normalizeSearch(query);
+  if (!q) return true;
+  const name = normalizeSearch(game.name);
+  const initials = searchInitials(game.name);
+  const group = normalizeSearch(game.initialGroup);
+  return name.includes(q) || initials.includes(q) || group === q;
 }
 
 function readPublicSeed() {
@@ -1758,6 +1762,12 @@ function pageSize(value) {
   return String(value) === "100" ? 100 : 10;
 }
 
+function adminRecentPageSize(value) {
+  if (String(value) === "1000") return 1000;
+  if (String(value) === "100") return 100;
+  return 10;
+}
+
 function pageNumber(value) {
   const page = Math.floor(Number(value || 1));
   return Number.isFinite(page) && page > 0 ? page : 1;
@@ -1765,6 +1775,15 @@ function pageNumber(value) {
 
 function pagedItems(items = [], requestedPage = 1, requestedSize = 10) {
   const size = pageSize(requestedSize);
+  const total = items.length;
+  const totalPages = Math.max(1, Math.ceil(total / size));
+  const page = Math.min(pageNumber(requestedPage), totalPages);
+  const start = (page - 1) * size;
+  return { items: items.slice(start, start + size), page, size, total, totalPages };
+}
+
+function pagedItemsWithSize(items = [], requestedPage = 1, requestedSize = 10) {
+  const size = Math.max(1, Math.floor(Number(requestedSize || 10)));
   const total = items.length;
   const totalPages = Math.max(1, Math.ceil(total / size));
   const page = Math.min(pageNumber(requestedPage), totalPages);
@@ -1811,21 +1830,25 @@ function adminRecentHref(params = {}, updates = {}) {
   const next = { ...params, ...updates };
   const query = new URLSearchParams({
     page: String(next.page || 1),
-    size: String(pageSize(next.size))
+    size: String(adminRecentPageSize(next.size))
   });
+  const q = String(next.q || "").trim();
+  const game = String(next.game || "").trim();
+  if (q) query.set("q", q);
+  if (game) query.set("game", game);
   return `/admin_read?${query.toString()}`;
 }
 
 function adminRecentPager(paged, params = {}) {
-  const prev = paged.page > 1
-    ? `<a href="${adminRecentHref(params, { page: paged.page - 1 })}">이전</a>`
-    : `<span>이전</span>`;
-  const next = paged.page < paged.totalPages
-    ? `<a href="${adminRecentHref(params, { page: paged.page + 1 })}">다음</a>`
-    : `<span>다음</span>`;
-  const maxNumbers = 20;
-  const pageStart = Math.max(1, Math.min(paged.page - Math.floor(maxNumbers / 2), paged.totalPages - maxNumbers + 1));
+  const maxNumbers = 30;
+  const pageStart = Math.floor((paged.page - 1) / maxNumbers) * maxNumbers + 1;
   const pageEnd = Math.min(paged.totalPages, pageStart + maxNumbers - 1);
+  const prev = pageStart > 1
+    ? `<a href="${adminRecentHref(params, { page: Math.max(1, pageStart - maxNumbers) })}">이전</a>`
+    : `<span>이전</span>`;
+  const next = pageEnd < paged.totalPages
+    ? `<a href="${adminRecentHref(params, { page: pageEnd + 1 })}">다음</a>`
+    : `<span>다음</span>`;
   const numbers = Array.from({ length: pageEnd - pageStart + 1 }, (_, index) => pageStart + index)
     .map((page) => page === paged.page
       ? `<b class="active-page">${page}</b>`
@@ -1836,6 +1859,7 @@ function adminRecentPager(paged, params = {}) {
     <div class="admin-page-size">
       <a class="${paged.size === 10 ? "active" : ""}" href="${adminRecentHref(params, { page: 1, size: 10 })}">10개</a>
       <a class="${paged.size === 100 ? "active" : ""}" href="${adminRecentHref(params, { page: 1, size: 100 })}">100개</a>
+      <a class="${paged.size === 1000 ? "active" : ""}" href="${adminRecentHref(params, { page: 1, size: 1000 })}">1000개</a>
     </div>
   </nav>`;
 }
@@ -2730,13 +2754,33 @@ function myPage(user, db) {
 function adminRecentPage(user, db, paging = {}) {
   const params = {
     page: pageNumber(paging.page),
-    size: pageSize(paging.size)
+    size: adminRecentPageSize(paging.size),
+    q: String(paging.q || "").trim(),
+    game: String(paging.game || "").trim()
+  };
+  const games = (db.games || []).filter((game) => game.visible !== false);
+  const selectedGame = params.game ? games.find((game) => game.slug === params.game) : null;
+  const gameMatchesPost = (post) => {
+    if (params.game && !selectedGame) return false;
+    if (!selectedGame && !params.q) return true;
+    const postSlug = String(post.gameSlug || "");
+    const postName = String(post.gameName || post.game || "");
+    if (selectedGame) {
+      return postSlug === selectedGame.slug || normalizeSearch(postName) === normalizeSearch(selectedGame.name);
+    }
+    return gameMatchesSearch({ name: postName, initialGroup: initialGroupFor(postName) }, params.q);
   };
   const posts = allTrades(db)
+    .filter(gameMatchesPost)
     .slice()
     .sort((a, b) => String(b.createdAt || "").localeCompare(String(a.createdAt || "")));
-  const paged = pagedItems(posts, params.page, params.size);
+  const paged = pagedItemsWithSize(posts, params.page, params.size);
   params.page = paged.page;
+  params.size = paged.size;
+  const searchLabel = selectedGame?.name || params.q;
+  const clearSearch = params.q || params.game
+    ? `<a class="admin-recent-search-clear" href="${adminRecentHref(params, { page: 1, q: "", game: "" })}">전체보기</a>`
+    : "";
   const rows = paged.items.map((post) => {
     const member = tradeShownMember(db, post);
     const gameName = post.gameName || post.game || "-";
@@ -2763,6 +2807,17 @@ function adminRecentPage(user, db, paging = {}) {
         <h2>최근 올라온 글</h2>
         <label class="admin-recent-check-all"><input type="checkbox" data-admin-recent-check-all> 전체선택</label>
       </div>
+      <form class="admin-recent-search" data-admin-recent-search>
+        <label>게임이름 검색
+          <input type="search" name="q" value="${esc(params.q || selectedGame?.name || "")}" placeholder="게임명 또는 초성을 검색하세요" autocomplete="off" data-admin-recent-game-search>
+        </label>
+        <input type="hidden" name="game" value="${esc(params.game)}" data-admin-recent-game-value>
+        <input type="hidden" name="size" value="${esc(params.size)}">
+        <button type="submit">검색</button>
+        ${clearSearch}
+        ${searchLabel ? `<span class="admin-recent-search-state">${esc(searchLabel)} 검색중</span>` : ""}
+        <div class="admin-recent-suggest" data-admin-recent-game-suggest></div>
+      </form>
       <table>
         <thead><tr><th>등급</th><th>닉네임</th><th>게임이름</th><th>제목</th><th>가격</th><th>선택</th></tr></thead>
         <tbody>${rows || "<tr><td colspan='6'>등록된 글이 없습니다.</td></tr>"}</tbody>
@@ -4060,7 +4115,9 @@ async function router(req, res) {
   if (url.pathname === "/admin_write") return protect(user, "admin") ? send(res, 200, adminWritePage(user, db, url.searchParams.get("game") || "")) : redirect(res, "/login");
   if (url.pathname === "/admin_read") return protect(user, "admin") ? send(res, 200, adminRecentPage(user, db, {
     page: url.searchParams.get("page"),
-    size: url.searchParams.get("size")
+    size: url.searchParams.get("size"),
+    q: url.searchParams.get("q") || "",
+    game: url.searchParams.get("game") || ""
   })) : redirect(res, "/login");
   if (url.pathname === "/staff") return protect(user, "staff") ? send(res, 200, staffPage(user)) : redirect(res, "/login");
   if (url.pathname === "/terms") return send(res, 200, legalPage(user, "service"));
