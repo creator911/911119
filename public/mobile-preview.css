@@ -454,7 +454,13 @@ body.mobile-preview.mobile-preview-debug::before {
   }
 
   body.mobile-preview .trade-card small {
-    display: none;
+    grid-column: 2;
+    display: block;
+    margin: 0;
+    color: #5f6f85;
+    font-size: 11px;
+    font-weight: 500;
+    line-height: 1.25;
   }
 
   body.mobile-preview .trade-card__side {
