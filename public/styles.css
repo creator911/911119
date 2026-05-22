@@ -969,7 +969,7 @@ td button { margin-right: 6px; min-height: 34px; }
 
   .admin-page .admin-member-panel th:nth-child(1),
   .admin-page .admin-member-panel td:nth-child(1) {
-    width: 14%;
+    width: 10%;
   }
 
   .admin-page .admin-member-panel th:nth-child(2),
@@ -979,41 +979,48 @@ td button { margin-right: 6px; min-height: 34px; }
 
   .admin-page .admin-member-panel th:nth-child(3),
   .admin-page .admin-member-panel td:nth-child(3) {
-    width: 10%;
+    width: 9%;
   }
 
   .admin-page .admin-member-panel th:nth-child(4),
   .admin-page .admin-member-panel td:nth-child(4) {
-    width: 10%;
+    width: 9%;
   }
 
   .admin-page .admin-member-panel th:nth-child(5),
   .admin-page .admin-member-panel td:nth-child(5) {
-    width: 8%;
+    width: 7%;
   }
 
   .admin-page .admin-member-panel th:nth-child(6),
-  .admin-page .admin-member-panel td:nth-child(6),
+  .admin-page .admin-member-panel td:nth-child(6) {
+    width: 12%;
+  }
+
   .admin-page .admin-member-panel th:nth-child(7),
-  .admin-page .admin-member-panel td:nth-child(7),
+  .admin-page .admin-member-panel td:nth-child(7) {
+    width: 7%;
+  }
+
   .admin-page .admin-member-panel th:nth-child(8),
   .admin-page .admin-member-panel td:nth-child(8) {
-    width: 7%;
+    width: 6%;
   }
 
   .admin-page .admin-member-panel th:nth-child(9),
   .admin-page .admin-member-panel td:nth-child(9) {
-    width: 8%;
+    width: 10%;
   }
 
   .admin-page .admin-member-panel th:nth-child(10),
   .admin-page .admin-member-panel td:nth-child(10) {
-    width: 14%;
+    width: 17%;
+    padding-left: 14px;
   }
 
   .admin-page .admin-member-panel th:nth-child(11),
   .admin-page .admin-member-panel td:nth-child(11) {
-    width: 9%;
+    width: 7%;
   }
 }
 
@@ -1188,7 +1195,8 @@ td button { margin-right: 6px; min-height: 34px; }
 }
 
 .admin-member-panel .admin-user-actions {
-  justify-content: flex-start;
+  width: 100%;
+  justify-content: flex-end;
   gap: 4px;
 }
 
@@ -1224,9 +1232,12 @@ td button { margin-right: 6px; min-height: 34px; }
 }
 
 .admin-page .admin-edit-field[data-admin-field="displayGrade"] span,
-.admin-page .admin-edit-field[data-admin-field="internalGrade"] span,
-.admin-page .admin-edit-field[data-admin-field="role"] span {
+.admin-page .admin-edit-field[data-admin-field="internalGrade"] span {
   max-width: 3.4em;
+}
+
+.admin-page .admin-edit-field[data-admin-field="role"] span {
+  max-width: 6em;
 }
 
 .admin-page .admin-account-inputs {

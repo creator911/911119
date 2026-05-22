@@ -2778,6 +2778,11 @@ function adminPage(user, db, paging = {}) {
   const onlineEditCell = (name, value, online, type = "text") => `<div class="admin-edit-field ${online ? "is-online" : ""}" data-admin-field="${name}"><span>${esc(value || "-")}</span><input name="${name}" type="${type}" value="${esc(value || "")}" hidden><button type="button" data-admin-edit="${name}">수정</button></div>`;
   const passwordCell = () => `<div class="admin-edit-field password" data-admin-field="password"><span>-</span><input name="password" type="password" value="" placeholder="새 비밀번호" hidden><button type="button" data-admin-edit="password">수정</button></div>`;
   const selectCell = (name, value, options) => `<div class="admin-edit-field" data-admin-field="${name}"><span>${esc(value || "-")}</span><select name="${name}" hidden>${options.map((option) => `<option value="${esc(option)}" ${option === value ? "selected" : ""}>${esc(option)}</option>`).join("")}</select><button type="button" data-admin-edit="${name}">수정</button></div>`;
+  const pointsCell = (value) => {
+    const amount = Math.max(0, Math.floor(Number(value || 0)));
+    const safeAmount = Number.isFinite(amount) ? amount : 0;
+    return `<div class="admin-edit-field" data-admin-field="points"><span>${safeAmount.toLocaleString()}</span><input name="points" type="number" value="${esc(safeAmount)}" hidden><button type="button" data-admin-edit="points">수정</button></div>`;
+  };
   const isOnline = (target) => target.lastSeenAt && Date.now() - new Date(target.lastSeenAt).getTime() < 2 * 60 * 1000;
   const roleOptions = user.role === "OWNER" ? ROLES : ROLES.filter((role) => role !== "OWNER");
   const pageParams = {
@@ -2804,7 +2809,7 @@ function adminPage(user, db, paging = {}) {
     <td>${selectCell("role", u.role, roleOptions.includes(u.role) ? roleOptions : [u.role, ...roleOptions])}</td>
     <td>${selectCell("displayGrade", u.displayGrade, DISPLAY_GRADES)}</td>
     <td>${selectCell("internalGrade", normalizeInternalGrade(u.internalGrade), INTERNAL_GRADES)}</td>
-    <td>${editCell("points", Number(u.points || 0), "number")}</td>
+    <td>${pointsCell(u.points)}</td>
     <td><div class="admin-user-actions"><button type="button" class="admin-row-save" data-admin-user-save="${esc(u.id)}">저장</button><button type="button" data-admin-user-logout="${esc(u.id)}">로그아웃</button><button type="button" data-admin-user-ip="${esc(u.id)}">IP</button></div></td>
     <td>${deleteButton}</td>
   </tr>`;
