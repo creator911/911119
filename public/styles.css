@@ -1237,7 +1237,9 @@ td button { margin-right: 6px; min-height: 34px; }
 }
 
 .admin-page .admin-edit-field[data-admin-field="role"] span {
-  max-width: 6em;
+  max-width: none;
+  overflow: visible;
+  text-overflow: clip;
 }
 
 .admin-page .admin-account-inputs {
