@@ -284,7 +284,8 @@ function openMemberChat() {
   chatWidget.classList.add("open");
   chatOpen?.classList.add("is-open");
   chatOpen?.setAttribute("aria-expanded", "true");
-  loadMemberChat();
+  resetStaffScrollLock($("#memberChatLog"));
+  loadMemberChat({ forceScroll: true });
   return true;
 }
 
@@ -445,6 +446,15 @@ document.addEventListener("click", async (event) => {
     const data = { id: adminSave.dataset.adminUserSave };
     $$("input, select", row).forEach((input) => { data[input.name] = input.value; });
     await post("/api/admin/user", data);
+    location.reload();
+    return;
+  }
+  const adminUserDelete = event.target.closest("[data-admin-user-delete]");
+  if (adminUserDelete) {
+    event.preventDefault();
+    const nickname = adminUserDelete.dataset.adminUserNickname || "회원";
+    if (!confirm(`${nickname} 님을 탈퇴시키겠습니까?\n해당 작업은 원복되지않습니다.`)) return;
+    await post("/api/admin/user/delete", { id: adminUserDelete.dataset.adminUserDelete });
     location.reload();
     return;
   }
@@ -1424,17 +1434,20 @@ if (chatOpen && chatWidget) {
     input.value = "";
     clearChatAttachment();
     updateChatSendState();
-    loadMemberChat();
+    resetStaffScrollLock($("#memberChatLog"));
+    loadMemberChat({ forceScroll: true });
   });
   updateChatSendState();
+  bindStaffScrollLock($("#memberChatLog"));
   loadMemberUnread();
   setInterval(() => chatWidget.classList.contains("open") && loadMemberChat(), 2500);
   setInterval(loadMemberUnread, 2500);
 }
 
-async function loadMemberChat() {
+async function loadMemberChat(options = {}) {
   const log = $("#memberChatLog");
   if (!log) return;
+  const scroll = staffScrollSnapshot(log);
   const res = await fetch("/api/chat/member");
   if (!res.ok) return;
   const { messages } = await res.json();
@@ -1450,7 +1463,7 @@ async function loadMemberChat() {
     const action = side === "member" ? `<button class="message-more" data-chat-menu="${escapeAttr(m.id)}" aria-label="메시지 액션">⋮</button><em class="message-actions" data-chat-actions="${escapeAttr(m.id)}"><button type="button" data-chat-delete="${escapeAttr(m.id)}">메시지 삭제</button></em>` : "";
     return `<p class="${side}" data-message-id="${escapeAttr(m.id)}"><b>${escapeHtml(name)}</b>${action}${text}${image}</p>`;
   }).join("");
-  log.scrollTop = log.scrollHeight;
+  restoreStaffScroll(log, scroll, Boolean(options.forceScroll));
   setMemberUnread(0);
 }
 
@@ -1691,6 +1704,466 @@ if (directChatOpen && directChatWidget) {
   }, 2500);
 }
 
+let activeRoom = null;
+const STAFF_PREVIEW_ROOM = "__staff_preview__";
+let staffRoomsCache = [];
+let staffPreviewSender = "staff";
+let staffCurrentMessages = [];
+window.staffSelectedAttachmentForPreview = null;
+window.staffMemberPreviewAttachment = null;
+
+function staffRoomName(room) {
+  return room?.memberName || room?.username || "회원";
+}
+
+function staffRoomRow(room) {
+  const unread = Number(room.staffUnread || 0);
+  const realName = room.realName || room.name || "-";
+  const adminPrefix = room.adminManagedTrade ? `[관리자글] ${escapeHtml(room.tradeTitle || "")} · ` : "";
+  const classes = [
+    "room-row",
+    activeRoom === room.id ? "active" : "",
+    unread ? "has-unread" : "",
+    room.adminManagedTrade ? "admin-trade-room" : "",
+    room.isHighInternalGrade ? "high-grade-room" : ""
+  ].filter(Boolean).join(" ");
+  return `<button class="${classes}" data-room="${escapeAttr(room.id)}">
+    <span class="room-row-head"><b>${escapeHtml(staffRoomName(room))}</b><i>${escapeHtml([room.displayGrade || "-", room.internalGrade || "-", realName].join(" · "))}</i></span>${unread ? `<em>${unread}</em>` : ""}<small>${adminPrefix}${escapeHtml(room.lastMessage || "첫 상담")}</small>
+  </button>`;
+}
+
+function staffActionRow(room, pinned) {
+  return `<div class="staff-action-row" data-action-room="${escapeAttr(room.id)}">
+    <button type="button" data-staff-room-action="${pinned ? "unpin" : "pin"}">${pinned ? "해제" : "고정"}</button>
+    <button type="button" data-staff-room-action="grade">차수</button>
+    <button type="button" data-staff-room-action="leave">나가기</button>
+  </div>`;
+}
+
+function staffRoomEntry(room, pinned) {
+  return `<div class="staff-room-entry">${staffActionRow(room, pinned)}${staffRoomRow(room)}</div>`;
+}
+
+function renderPreviewRoom() {
+  return `<button class="room-row preview-room ${activeRoom === STAFF_PREVIEW_ROOM ? "active" : ""}" data-room="${STAFF_PREVIEW_ROOM}">
+    <span class="room-row-head"><b>채팅 확인하기</b><i>미리보기</i></span><small>상담사/회원 말풍선을 저장해 확인합니다.</small>
+  </button>`;
+}
+
+function renderPreviewActionRow() {
+  return `<div class="staff-action-row staff-action-row--preview" aria-hidden="true"></div>`;
+}
+
+function alignStaffActionRows(actions, rows) {
+  if (!actions || !rows) return;
+  const actionItems = Array.from(actions.querySelectorAll(".staff-action-row"));
+  const roomItems = Array.from(rows.querySelectorAll(".room-row"));
+  actionItems.forEach((item, index) => {
+    const room = roomItems[index];
+    item.style.height = room ? `${Math.max(64, room.getBoundingClientRect().height)}px` : "64px";
+  });
+}
+
+function alignAllStaffActionRows() {
+  alignStaffActionRows($("#staffPinnedActions"), $("#staffPinnedRooms"));
+  alignStaffActionRows($("#staffNormalActions"), $("#staffRooms"));
+}
+
+function syncStaffRoomScroll(first, second) {
+  if (!first || !second) return;
+  let locked = false;
+  const sync = (source, target) => {
+    if (locked) return;
+    locked = true;
+    target.scrollTop = source.scrollTop;
+    requestAnimationFrame(() => { locked = false; });
+  };
+  first.addEventListener("scroll", () => sync(first, second), { passive: true });
+  second.addEventListener("scroll", () => sync(second, first), { passive: true });
+}
+
+function formatStaffChatTime(value) {
+  if (!value) return "";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  const hour = String(date.getHours()).padStart(2, "0");
+  const minute = String(date.getMinutes()).padStart(2, "0");
+  return `${month}.${day} ${hour}:${minute}`;
+}
+
+function staffScrollSnapshot(log) {
+  if (!log) return { stick: true, bottomOffset: 0 };
+  const bottomOffset = Math.max(0, log.scrollHeight - log.scrollTop - log.clientHeight);
+  const savedOffset = Number(log.dataset.bottomOffset || bottomOffset);
+  const locked = log.dataset.preserveScroll === "1";
+  return { stick: !locked && bottomOffset < 80, bottomOffset: locked ? savedOffset : bottomOffset, locked };
+}
+
+function restoreStaffScroll(log, snapshot, force = false) {
+  if (!log) return;
+  if ((force && !snapshot?.locked) || snapshot?.stick) {
+    log.scrollTop = log.scrollHeight;
+    updateStaffScrollLock(log);
+    return;
+  }
+  log.scrollTop = Math.max(0, log.scrollHeight - log.clientHeight - Number(snapshot?.bottomOffset || 0));
+  updateStaffScrollLock(log);
+}
+
+function updateStaffScrollLock(log) {
+  if (!log) return;
+  const bottomOffset = Math.max(0, log.scrollHeight - log.scrollTop - log.clientHeight);
+  log.dataset.bottomOffset = String(bottomOffset);
+  log.dataset.preserveScroll = bottomOffset > 80 ? "1" : "";
+}
+
+function resetStaffScrollLock(log) {
+  if (!log) return;
+  delete log.dataset.bottomOffset;
+  delete log.dataset.preserveScroll;
+}
+
+function bindStaffScrollLock(log) {
+  if (!log || log.dataset.scrollLockBound === "1") return;
+  log.dataset.scrollLockBound = "1";
+  log.addEventListener("scroll", () => updateStaffScrollLock(log), { passive: true });
+}
+
+loadStaffRooms = async function loadStaffRoomsV2() {
+  const normalList = $("#staffRooms");
+  const pinnedList = $("#staffPinnedRooms");
+  if (!normalList || !pinnedList) return;
+  const res = await fetch("/api/chat/staff");
+  if (!res.ok) return;
+  const { rooms } = await res.json();
+  staffRoomsCache = rooms;
+  const pinnedRooms = rooms.filter((room) => room.pinned);
+  const normalRooms = rooms.filter((room) => !room.pinned);
+  $("#pinnedRoomCount").textContent = pinnedRooms.length;
+  $("#roomCount").textContent = normalRooms.length;
+  pinnedList.innerHTML = renderPreviewRoom() + pinnedRooms.map((room) => staffRoomEntry(room, true)).join("");
+  normalList.innerHTML = normalRooms.map((room) => staffRoomEntry(room, false)).join("") || "<p class='empty'>상담방이 없습니다.</p>";
+  if ($("#staffPinnedActions")) $("#staffPinnedActions").innerHTML = renderPreviewActionRow() + pinnedRooms.map((room) => staffActionRow(room, true)).join("");
+  if ($("#staffNormalActions")) $("#staffNormalActions").innerHTML = normalRooms.map((room) => staffActionRow(room, false)).join("");
+  requestAnimationFrame(alignAllStaffActionRows);
+};
+
+function staffMessageMarkup(m, preview = false) {
+  const deleted = m.deletedByMember ? "<em class=\"deleted-note\">(삭제)</em>" : "";
+  if (m.attachment) chatImageSources.set(m.id, { src: m.attachment.dataUrl, name: m.attachment.name });
+  const image = m.attachment ? `<button type="button" class="chat-image-link" data-chat-image-id="${escapeAttr(m.id)}"><img class="chat-image" src="${escapeAttr(m.attachment.dataUrl)}" alt="${escapeAttr(m.attachment.name)}"></button>` : "";
+  const read = m.senderType === "staff" && m.read ? "<small class=\"read-receipt\">읽음</small>" : "";
+  const edited = m.editedAt ? "<small class=\"edited-note\">수정됨</small>" : "";
+  const time = formatStaffChatTime(m.createdAt);
+  const deleteAttr = preview ? `data-staff-preview-delete="${escapeAttr(m.id)}"` : `data-staff-message-delete="${escapeAttr(m.id)}"`;
+  const editAttr = preview ? `data-staff-preview-edit="${escapeAttr(m.id)}"` : `data-staff-message-edit="${escapeAttr(m.id)}"`;
+  return `<div class="staff-message ${escapeAttr(m.senderType)}" data-message-id="${escapeAttr(m.id)}"><div class="staff-inline-editor" hidden><textarea rows="2">${escapeHtml(m.message || "")}</textarea><div><button type="button" data-staff-edit-save="${escapeAttr(m.id)}">저장</button><button type="button" data-staff-edit-cancel>취소</button></div></div><b><em class="staff-message-name">${escapeHtml(m.displayName)}${m.internalStaffName ? ` (${escapeHtml(m.internalStaffName)})` : ""}</em>${time ? `<time>${escapeHtml(time)}</time>` : ""}</b><span>${messageHtml(m.message || "")}${deleted}</span>${image}<span class="staff-message-tools"><button type="button" ${editAttr}>수정</button><button type="button" ${deleteAttr}>삭제</button></span>${edited}${read}</div>`;
+}
+
+function staffMemberPreviewMarkup(m, draft = false) {
+  const side = m.senderType === "staff" ? "staff" : "member";
+  const name = side === "staff" ? "상담사" : (m.displayName || "회원");
+  if (m.attachment) chatImageSources.set(m.id || "staff-draft-image", { src: m.attachment.dataUrl, name: m.attachment.name });
+  const text = m.message ? `<span>${messageHtml(m.message)}</span>` : "";
+  const image = m.attachment ? `<button type="button" class="chat-image-link" data-chat-image-id="${escapeAttr(m.id || "staff-draft-image")}"><img class="chat-image" src="${escapeAttr(m.attachment.dataUrl)}" alt="${escapeAttr(m.attachment.name)}"></button>` : "";
+  return `<p class="${side}${draft ? " draft" : ""}"><b>${escapeHtml(name)}</b>${text}${image}</p>`;
+}
+
+function renderStaffMemberPreview(options = {}) {
+  const log = $("#staffMemberPreviewLog");
+  if (!log) return;
+  const scroll = staffScrollSnapshot(log);
+  const isPreviewRoom = activeRoom === STAFF_PREVIEW_ROOM;
+  const messages = [{ id: "support-greeting", senderType: "staff", displayName: "상담사", message: "안녕하세요.\n아이템존 고객센터 입니다.", createdAt: "" }, ...staffCurrentMessages];
+  const draftText = $("#staffSend textarea[name=\"message\"]")?.value || "";
+  const draftSender = isPreviewRoom ? staffPreviewSender : "staff";
+  const draft = draftText.trim() || window.staffSelectedAttachmentForPreview
+    ? staffMemberPreviewMarkup({ id: "staff-draft", senderType: draftSender, displayName: draftSender === "staff" ? "상담사" : "회원", message: draftText, attachment: window.staffSelectedAttachmentForPreview }, true)
+    : "";
+  const memberDraftText = $("#staffMemberPreviewSend textarea[name=\"message\"]")?.value || "";
+  const memberDraft = memberDraftText.trim() || window.staffMemberPreviewAttachment
+    ? staffMemberPreviewMarkup({ id: "staff-member-draft", senderType: "member", displayName: "회원", message: memberDraftText, attachment: window.staffMemberPreviewAttachment }, true)
+    : "";
+  log.innerHTML = messages.map((m) => staffMemberPreviewMarkup(m)).join("") + draft + memberDraft;
+  restoreStaffScroll(log, scroll, Boolean(options.forceScroll));
+  const meta = $("#staffMemberPreviewMeta");
+  if (meta) meta.textContent = activeRoom ? (isPreviewRoom ? "미리보기 방" : "회원에게 보이는 상담창") : "상담방을 선택하세요.";
+}
+
+loadStaffMessages = async function loadStaffMessagesV2(options = {}) {
+  if (!activeRoom) return;
+  const preview = activeRoom === STAFF_PREVIEW_ROOM;
+  const res = await fetch(preview ? "/api/chat/staff-preview" : `/api/chat/staff/${encodeURIComponent(activeRoom)}`);
+  if (!res.ok) return;
+  const { messages } = await res.json();
+  const log = $("#staffMessages");
+  const scroll = staffScrollSnapshot(log);
+  staffCurrentMessages = messages;
+  $("#staffRoomMeta").textContent = preview ? "채팅 확인하기: 상담사/회원 말풍선을 미리 확인합니다." : "이 로그는 실제 상담 기록으로 저장됩니다.";
+  $("#staffClearRoom")?.removeAttribute("disabled");
+  $("#staffPreviewSpeaker")?.toggleAttribute("hidden", !preview);
+  log.innerHTML = messages.map((m) => staffMessageMarkup(m, preview)).join("");
+  restoreStaffScroll(log, scroll, Boolean(options.forceScroll));
+  renderStaffMemberPreview({ forceScroll: Boolean(options.forceScroll) });
+};
+
+function autoGrowStaffInput() {
+  const input = $("#staffSend textarea[name=\"message\"]");
+  const previewInput = $("#staffMemberPreviewSend textarea[name=\"message\"]");
+  [input, previewInput].filter(Boolean).forEach((item) => {
+    item.style.height = "auto";
+    const max = Number(item.dataset.maxAutoHeight || 190);
+    item.style.height = `${Math.min(item.scrollHeight, max)}px`;
+  });
+}
+
+if (document.body.dataset.page === "staff") {
+  const staffForm = $("#staffSend");
+  const staffInput = $("#staffSend textarea[name=\"message\"]");
+  const staffPreviewForm = $("#staffMemberPreviewSend");
+  const staffPreviewInput = $("#staffMemberPreviewSend textarea[name=\"message\"]");
+  const staffFileInput = $("#staffChatFileInput");
+  const staffPreviewFileInput = $("#staffMemberPreviewFileInput");
+  const staffAttachmentPreview = $("#staffChatAttachmentPreview");
+  const staffMemberPreviewAttachmentPreview = $("#staffMemberPreviewAttachmentPreview");
+  let selectedStaffAttachment = null;
+  let selectedMemberPreviewAttachment = null;
+  const clearStaffAttachment = () => {
+    selectedStaffAttachment = null;
+    window.staffSelectedAttachmentForPreview = null;
+    if (staffFileInput) staffFileInput.value = "";
+    if (staffAttachmentPreview) staffAttachmentPreview.innerHTML = "";
+    renderStaffMemberPreview();
+  };
+  const clearMemberPreviewAttachment = () => {
+    selectedMemberPreviewAttachment = null;
+    window.staffMemberPreviewAttachment = null;
+    if (staffPreviewFileInput) staffPreviewFileInput.value = "";
+    if (staffMemberPreviewAttachmentPreview) staffMemberPreviewAttachmentPreview.innerHTML = "";
+    renderStaffMemberPreview();
+  };
+  const updateStaffDraft = () => {
+    autoGrowStaffInput();
+    const active = Boolean(staffPreviewInput?.value.trim() || selectedMemberPreviewAttachment);
+    const sendButton = $("#staffMemberPreviewSend .chat-send-button");
+    const sendImage = $("#staffMemberPreviewSend .chat-send-button img");
+    sendButton?.classList.toggle("active", active);
+    if (sendImage) sendImage.src = active ? "/assets/chat/send-active.png" : "/assets/chat/send-idle.png";
+    renderStaffMemberPreview();
+  };
+  const openRoom = (roomId) => {
+    activeRoom = roomId;
+    resetStaffScrollLock($("#staffMessages"));
+    resetStaffScrollLock($("#staffMemberPreviewLog"));
+    loadStaffMessages({ forceScroll: true });
+    loadStaffRooms();
+  };
+  document.addEventListener("click", async (event) => {
+    const roomButton = event.target.closest("[data-room]");
+    if (roomButton) {
+      openRoom(roomButton.dataset.room);
+      return;
+    }
+    const speakerButton = event.target.closest("[data-preview-speaker]");
+    if (speakerButton) {
+      staffPreviewSender = speakerButton.dataset.previewSpeaker === "member" ? "member" : "staff";
+      $$("[data-preview-speaker]").forEach((button) => button.classList.toggle("active", button === speakerButton));
+      renderStaffMemberPreview({ forceScroll: true });
+      return;
+    }
+    const roomAction = event.target.closest("[data-staff-room-action]");
+    if (roomAction) {
+      const row = roomAction.closest("[data-action-room]");
+      const roomId = row?.dataset.actionRoom;
+      const room = staffRoomsCache.find((item) => item.id === roomId);
+      if (!roomId || !room) return;
+      const action = roomAction.dataset.staffRoomAction;
+      if (action === "pin" || action === "unpin") {
+        await post(`/api/chat/staff/${encodeURIComponent(roomId)}/pin`, { pinned: action === "pin" });
+      } else if (action === "grade") {
+        await post(`/api/chat/staff/${encodeURIComponent(roomId)}/internal-grade-cycle`, {});
+      } else if (action === "leave") {
+        if (!confirm(`${staffRoomName(room)} 채팅방을 정말 나가시겠습니까`)) return;
+        await post(`/api/chat/staff/${encodeURIComponent(roomId)}/leave`, {});
+        if (activeRoom === roomId) {
+          activeRoom = null;
+          $("#staffMessages").innerHTML = "";
+          $("#staffRoomMeta").textContent = "상담방을 선택하세요.";
+          $("#staffClearRoom")?.setAttribute("disabled", "");
+          $("#staffPreviewSpeaker")?.setAttribute("hidden", "");
+          staffCurrentMessages = [];
+          renderStaffMemberPreview();
+        }
+      }
+      await loadStaffRooms();
+      if (activeRoom) await loadStaffMessages();
+      return;
+    }
+    const editButton = event.target.closest("[data-staff-message-edit], [data-staff-preview-edit]");
+    if (editButton && activeRoom) {
+      $$(".staff-inline-editor").forEach((panel) => { panel.hidden = true; });
+      const panel = editButton.closest("[data-message-id]")?.querySelector(".staff-inline-editor");
+      if (panel) {
+        panel.hidden = false;
+        $("textarea", panel)?.focus();
+      }
+      return;
+    }
+    const saveEditButton = event.target.closest("[data-staff-edit-save]");
+    if (saveEditButton && activeRoom) {
+      const id = saveEditButton.dataset.staffEditSave;
+      const panel = saveEditButton.closest(".staff-inline-editor");
+      const next = $("textarea", panel)?.value || "";
+      if (!next.trim()) return;
+      if (activeRoom === STAFF_PREVIEW_ROOM) await post("/api/chat/staff-preview/edit-message", { id, message: next });
+      else await post(`/api/chat/staff/${encodeURIComponent(activeRoom)}/edit-message`, { id, message: next });
+      await loadStaffMessages();
+      await loadStaffRooms();
+      return;
+    }
+    const cancelEditButton = event.target.closest("[data-staff-edit-cancel]");
+    if (cancelEditButton) {
+      cancelEditButton.closest(".staff-inline-editor").hidden = true;
+      return;
+    }
+    const deleteButton = event.target.closest("[data-staff-message-delete], [data-staff-preview-delete]");
+    if (deleteButton && activeRoom) {
+      event.preventDefault();
+      const id = deleteButton.dataset.staffMessageDelete || deleteButton.dataset.staffPreviewDelete;
+      if (activeRoom === STAFF_PREVIEW_ROOM) await post("/api/chat/staff-preview/delete-message", { id });
+      else await post(`/api/chat/staff/${encodeURIComponent(activeRoom)}/delete-message`, { id });
+      await loadStaffMessages();
+      await loadStaffRooms();
+      return;
+    }
+    const clearButton = event.target.closest("#staffClearRoom");
+    if (clearButton && activeRoom) {
+      event.preventDefault();
+      if (!confirm("이 상담방의 채팅 내용을 비울까요?")) return;
+      if (activeRoom === STAFF_PREVIEW_ROOM) await post("/api/chat/staff-preview/clear", {});
+      else await post(`/api/chat/staff/${encodeURIComponent(activeRoom)}/clear`, {});
+      resetStaffScrollLock($("#staffMessages"));
+      resetStaffScrollLock($("#staffMemberPreviewLog"));
+      await loadStaffMessages({ forceScroll: true });
+      await loadStaffRooms();
+    }
+  });
+  $("#staffChatAttach")?.addEventListener("click", () => staffFileInput?.click());
+  $("#staffMemberPreviewAttach")?.addEventListener("click", () => staffPreviewFileInput?.click());
+  staffFileInput?.addEventListener("change", () => {
+    const file = staffFileInput.files?.[0];
+    if (!file) return clearStaffAttachment();
+    if (!file.type.startsWith("image/")) {
+      alert("사진 파일만 첨부할 수 있습니다.");
+      return clearStaffAttachment();
+    }
+    if (file.size > 3 * 1024 * 1024) {
+      alert("사진은 3MB 이하만 첨부할 수 있습니다.");
+      return clearStaffAttachment();
+    }
+    const reader = new FileReader();
+    reader.addEventListener("load", () => {
+      selectedStaffAttachment = { name: file.name, type: file.type, size: file.size, dataUrl: reader.result };
+      window.staffSelectedAttachmentForPreview = selectedStaffAttachment;
+      if (staffAttachmentPreview) {
+        staffAttachmentPreview.innerHTML = `<img src="${escapeAttr(reader.result)}" alt=""><span>${escapeHtml(file.name)}</span><button type="button" aria-label="첨부 삭제">×</button>`;
+        $("button", staffAttachmentPreview)?.addEventListener("click", clearStaffAttachment);
+      }
+      renderStaffMemberPreview();
+    });
+    reader.readAsDataURL(file);
+  });
+  staffPreviewFileInput?.addEventListener("change", () => {
+    const file = staffPreviewFileInput.files?.[0];
+    if (!file) return clearMemberPreviewAttachment();
+    if (!file.type.startsWith("image/")) {
+      alert("사진 파일만 첨부할 수 있습니다.");
+      return clearMemberPreviewAttachment();
+    }
+    if (file.size > 3 * 1024 * 1024) {
+      alert("사진은 3MB 이하만 첨부할 수 있습니다.");
+      return clearMemberPreviewAttachment();
+    }
+    const reader = new FileReader();
+    reader.addEventListener("load", () => {
+      selectedMemberPreviewAttachment = { name: file.name, type: file.type, size: file.size, dataUrl: reader.result };
+      window.staffMemberPreviewAttachment = selectedMemberPreviewAttachment;
+      if (staffMemberPreviewAttachmentPreview) {
+        staffMemberPreviewAttachmentPreview.innerHTML = `<img src="${escapeAttr(reader.result)}" alt=""><span>${escapeHtml(file.name)}</span><button type="button" aria-label="첨부 삭제">×</button>`;
+        $("button", staffMemberPreviewAttachmentPreview)?.addEventListener("click", clearMemberPreviewAttachment);
+      }
+      updateStaffDraft();
+    });
+    reader.readAsDataURL(file);
+  });
+  staffInput?.addEventListener("input", updateStaffDraft);
+  staffPreviewInput?.addEventListener("input", updateStaffDraft);
+  syncStaffRoomScroll($("#staffPinnedActions"), $("#staffPinnedRooms"));
+  syncStaffRoomScroll($("#staffNormalActions"), $("#staffRooms"));
+  window.addEventListener("resize", alignAllStaffActionRows);
+  staffInput?.addEventListener("keydown", (event) => {
+    if (event.key !== "Enter" || event.isComposing) return;
+    if (event.shiftKey) return;
+    event.preventDefault();
+    staffForm?.requestSubmit();
+  });
+  staffPreviewInput?.addEventListener("keydown", (event) => {
+    if (event.key !== "Enter" || event.isComposing) return;
+    if (event.shiftKey) return;
+    event.preventDefault();
+    staffPreviewForm?.requestSubmit();
+  });
+  staffPreviewForm?.addEventListener("submit", (event) => {
+    event.preventDefault();
+    if (!activeRoom || !staffPreviewInput) return;
+    const text = staffPreviewInput.value;
+    if (!text.trim() && !selectedMemberPreviewAttachment) return;
+    const payload = { senderType: "member", message: text, attachment: selectedMemberPreviewAttachment };
+    const request = activeRoom === STAFF_PREVIEW_ROOM
+      ? post("/api/chat/staff-preview", payload)
+      : post(`/api/chat/staff/${encodeURIComponent(activeRoom)}/member-message`, payload);
+    request.then(async () => {
+      staffPreviewInput.value = "";
+      clearMemberPreviewAttachment();
+      autoGrowStaffInput();
+      const sendImage = $("#staffMemberPreviewSend .chat-send-button img");
+      if (sendImage) sendImage.src = "/assets/chat/send-idle.png";
+      $("#staffMemberPreviewSend .chat-send-button")?.classList.remove("active");
+      resetStaffScrollLock($("#staffMessages"));
+      resetStaffScrollLock($("#staffMemberPreviewLog"));
+      await loadStaffMessages({ forceScroll: true });
+      await loadStaffRooms();
+    }).catch((error) => alert(error.message));
+  });
+  staffForm?.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    if (!activeRoom) return;
+    const input = $("#staffSend textarea[name=\"message\"]");
+    if (!input.value.trim() && !selectedStaffAttachment) return;
+    if (activeRoom === STAFF_PREVIEW_ROOM) await post("/api/chat/staff-preview", { senderType: staffPreviewSender, message: input.value, attachment: selectedStaffAttachment });
+    else await post(`/api/chat/staff/${encodeURIComponent(activeRoom)}`, { message: input.value, attachment: selectedStaffAttachment });
+    input.value = "";
+    if (staffPreviewInput) staffPreviewInput.value = "";
+    autoGrowStaffInput();
+    clearStaffAttachment();
+    resetStaffScrollLock($("#staffMessages"));
+    resetStaffScrollLock($("#staffMemberPreviewLog"));
+    await loadStaffMessages({ forceScroll: true });
+    await loadStaffRooms();
+  });
+  autoGrowStaffInput();
+  bindStaffScrollLock($("#staffMessages"));
+  bindStaffScrollLock($("#staffMemberPreviewLog"));
+  loadStaffRooms();
+  renderStaffMemberPreview();
+  setInterval(() => {
+    loadStaffRooms();
+    if (activeRoom) loadStaffMessages();
+  }, 2500);
+}
+
 document.addEventListener("click", async (event) => {
   const menuButton = event.target.closest("[data-direct-chat-menu]");
   if (menuButton) {
@@ -1711,7 +2184,6 @@ document.addEventListener("click", async (event) => {
   }
 });
 
-let activeRoom = null;
 async function loadStaffRooms() {
   const list = $("#staffRooms");
   if (!list) return;
@@ -1746,7 +2218,7 @@ async function loadStaffMessages() {
   log.scrollTop = log.scrollHeight;
 }
 
-if (document.body.dataset.page === "staff") {
+if (document.body.dataset.page === "staff" && false) {
   const staffForm = $("#staffSend");
   const staffInput = staffForm?.message;
   const staffFileInput = $("#staffChatFileInput");

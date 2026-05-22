@@ -2018,6 +2018,134 @@ body.mobile-preview.mobile-preview-debug::before {
   }
 }
 
+@media (max-width: 900px) {
+  body.mobile-preview {
+    --mobile-chat-log-x: 15px;
+    --mobile-chat-bubble-max: 84%;
+    --mobile-chat-avatar: 30px;
+    --mobile-chat-avatar-gap: 9px;
+    --mobile-chat-bubble-pad-y: 12px;
+    --mobile-chat-bubble-pad-x: 16px;
+    --mobile-chat-bubble-radius: 20px;
+    --mobile-chat-font-size: 15px;
+    --mobile-chat-line-height: 1.42;
+    --mobile-chat-name-size: 13px;
+  }
+
+  body.mobile-preview .chat-widget .member-chat-log,
+  body.mobile-preview .direct-chat-log,
+  body.mobile-preview .staff-member-preview-panel .member-chat-log {
+    padding: 16px var(--mobile-chat-log-x) 14px;
+    overflow-x: hidden;
+    background: #fff;
+  }
+
+  body.mobile-preview .chat-widget .member-chat-log p,
+  body.mobile-preview .direct-chat-log p,
+  body.mobile-preview .staff-member-preview-panel .member-chat-log p {
+    max-width: var(--mobile-chat-bubble-max);
+    min-width: 0;
+    margin: 0 0 12px;
+  }
+
+  body.mobile-preview .chat-widget .member-chat-log p.staff,
+  body.mobile-preview .direct-chat-log p.staff,
+  body.mobile-preview .staff-member-preview-panel .member-chat-log p.staff {
+    grid-template-columns: var(--mobile-chat-avatar) minmax(0, auto);
+    column-gap: var(--mobile-chat-avatar-gap);
+  }
+
+  body.mobile-preview .chat-widget .member-chat-log p.staff::before,
+  body.mobile-preview .direct-chat-log p.staff::before,
+  body.mobile-preview .staff-member-preview-panel .member-chat-log p.staff::before {
+    width: var(--mobile-chat-avatar);
+    height: var(--mobile-chat-avatar);
+  }
+
+  body.mobile-preview .chat-widget .member-chat-log p.member,
+  body.mobile-preview .direct-chat-log p.member,
+  body.mobile-preview .staff-member-preview-panel .member-chat-log p.member {
+    width: fit-content;
+    margin-left: auto;
+    align-items: flex-end;
+  }
+
+  body.mobile-preview .chat-widget .member-chat-log b,
+  body.mobile-preview .direct-chat-log b,
+  body.mobile-preview .staff-member-preview-panel .member-chat-log b {
+    margin: 0 0 5px 14px;
+    font-size: var(--mobile-chat-name-size);
+    font-weight: 800;
+    line-height: 1.2;
+  }
+
+  body.mobile-preview .chat-widget .member-chat-log span,
+  body.mobile-preview .direct-chat-log span,
+  body.mobile-preview .staff-member-preview-panel .member-chat-log span {
+    width: fit-content;
+    max-width: 100%;
+    min-width: 0;
+    padding: var(--mobile-chat-bubble-pad-y) var(--mobile-chat-bubble-pad-x);
+    border-radius: var(--mobile-chat-bubble-radius);
+    font-size: var(--mobile-chat-font-size);
+    line-height: var(--mobile-chat-line-height);
+    white-space: pre-wrap;
+    word-break: keep-all;
+    overflow-wrap: anywhere;
+    text-decoration: none;
+  }
+
+  body.mobile-preview .chat-widget .member-chat-log .chat-image,
+  body.mobile-preview .direct-chat-log .chat-image,
+  body.mobile-preview .staff-member-preview-panel .member-chat-log .chat-image {
+    max-width: min(230px, calc(100vw - 92px));
+    max-height: 190px;
+    border-radius: 16px;
+  }
+
+  body.mobile-preview[data-page="staff"] {
+    padding-bottom: 0;
+  }
+
+  body.mobile-preview[data-page="staff"] .staff-page {
+    width: 100%;
+    max-width: 100vw;
+    height: auto;
+    min-height: 100dvh;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    overflow: visible;
+  }
+
+  body.mobile-preview[data-page="staff"] .chat-list,
+  body.mobile-preview[data-page="staff"] .staff-chat,
+  body.mobile-preview[data-page="staff"] .staff-member-preview-panel {
+    width: 100%;
+    max-width: 100vw;
+    min-width: 0;
+  }
+
+  body.mobile-preview[data-page="staff"] .staff-member-preview-panel {
+    position: static;
+    height: 100dvh;
+    display: grid;
+    grid-template-rows: auto minmax(0, 1fr) auto;
+    border: 0;
+    border-top: 1px solid #dbe6f3;
+    border-radius: 0;
+    box-shadow: none;
+    opacity: 1;
+    pointer-events: auto;
+    transform: none;
+    visibility: visible;
+  }
+
+  body.mobile-preview[data-page="staff"] .staff-member-preview-panel .staff-member-preview-title {
+    min-height: 58px;
+    padding: 12px 15px;
+  }
+}
+
 @media (max-width: 430px) {
   body.mobile-preview .brand,
   body.mobile-preview .brand img {

@@ -38,6 +38,7 @@ const PG_COLLECTIONS = [
 ];
 const PUBLIC_SEED_PATH = path.join(DATA_DIR, "public-seed.json");
 const PUBLIC_DIR = path.join(__dirname, "public");
+const IMPORT_UPLOAD_DIR = path.join(PUBLIC_DIR, "uploads", "imported");
 const LEGAL_DIR = path.join(DATA_DIR, "legal");
 const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 let dbWriteQueue = Promise.resolve();
@@ -867,7 +868,7 @@ function sanitizeNoticeHtml(html = "") {
       if (name === "img") {
         const src = attrs.match(/\ssrc=(?:"([^"]*)"|'([^']*)'|([^\s>]+))/i);
         const value = src?.[1] || src?.[2] || src?.[3] || "";
-        if (!/^(data:image\/(?:png|jpe?g|gif|webp);base64,|\/assets\/|https?:\/\/)/i.test(value)) return "";
+        if (!/^(data:image\/(?:png|jpe?g|gif|webp);base64,|\/assets\/|\/uploads\/|https?:\/\/)/i.test(value)) return "";
         return `<img src="${esc(value)}" alt="">`;
       }
       if (name === "span") {
@@ -954,6 +955,72 @@ function adminTradeStatusValue(type, state) {
   if (state === "progress") return type === "sell" ? "판매 진행중" : "구매 진행중";
   if (state === "done") return type === "sell" ? "판매완료" : "구매완료";
   return type === "sell" ? "판매중" : "구매중";
+}
+
+function adminImportTradeRow(db, user, data = {}) {
+  const type = data.type === "buy" ? "buy" : "sell";
+  const game = (db.games || []).find((item) => item.slug === data.gameSlug);
+  if (!game) return { error: "게임을 선택하세요." };
+  const owner = ownerAccount(db);
+  if (!owner) return { error: "오너 계정을 찾을 수 없습니다." };
+  const state = ["open", "progress", "done"].includes(data.tradeStatus) ? data.tradeStatus : "open";
+  const needsCounterparty = state === "progress" || state === "done";
+  const counterparty = data.counterpartyId ? (db.users || []).find((item) => item.id === data.counterpartyId) : null;
+  if (needsCounterparty && !counterparty) return { error: "거래 진행중/완료 상태는 상대 회원을 선택해야 합니다." };
+  if (counterparty?.id === owner.id) return { error: "상대 회원은 오너 계정과 달라야 합니다." };
+  const title = String(data.title || "").trim();
+  if (!title) return { error: "제목을 입력하세요." };
+  const price = Number(data.price);
+  if (!Number.isFinite(price) || price < 0) return { error: "가격을 확인하세요." };
+  const descriptionHtml = sanitizeNoticeHtml(String(data.description || "").trim());
+  const descriptionText = String(data.descriptionText || "").trim();
+  const row = {
+    id: id(type),
+    userId: owner.id,
+    settlementUserId: owner.id,
+    adminAuthorId: user.id,
+    adminManaged: true,
+    importSourceKey: String(data.itemKey || data.importSourceKey || "").trim(),
+    displayNickname: String(data.displayNickname || owner.nickname || "관리자").trim(),
+    displayGrade: String(data.displayGrade || owner.displayGrade || "마스터").trim(),
+    gameSlug: game.slug,
+    gameName: game.name,
+    game: game.name,
+    server: data.server || "서버전체",
+    tradeKind: tradeKindLabel(data.tradeKind),
+    category: tradeKindLabel(data.tradeKind),
+    unit: data.unit || "일반",
+    characterName: data.characterName || "",
+    quantity: data.quantity ? Number(data.quantity) : null,
+    title,
+    description: descriptionHtml,
+    descriptionHtml,
+    descriptionText,
+    price,
+    status: adminTradeStatusValue(type, state),
+    createdAt: noticeCreatedAt(data.createdAt)
+  };
+  if (counterparty) row.counterpartyId = counterparty.id;
+  return { row, type, state, counterparty };
+}
+
+function safeImportPathPart(value = "item") {
+  return String(value || "item").replace(/[^a-zA-Z0-9_-]/g, "_").slice(0, 80) || "item";
+}
+
+function importImagePayload(file = {}, index = 0) {
+  const dataUrl = String(file.dataUrl || "");
+  const match = dataUrl.match(/^data:image\/(png|jpe?g|gif|webp);base64,([a-z0-9+/=\s]+)$/i);
+  if (!match) throw new Error("지원하지 않는 이미지 형식입니다.");
+  const subtype = match[1].toLowerCase().replace("jpeg", "jpg");
+  const buffer = Buffer.from(match[2].replace(/\s/g, ""), "base64");
+  if (!buffer.length) throw new Error("이미지 데이터가 비어 있습니다.");
+  if (buffer.length > 8 * 1024 * 1024) throw new Error("이미지는 8MB 이하만 업로드할 수 있습니다.");
+  const original = path.basename(String(file.name || `image-${index + 1}.${subtype}`));
+  const rawExt = path.extname(original).toLowerCase().replace(/[^a-z0-9.]/g, "");
+  const ext = [".png", ".jpg", ".jpeg", ".gif", ".webp"].includes(rawExt) ? rawExt.replace(".jpeg", ".jpg") : `.${subtype}`;
+  const hash = crypto.createHash("sha256").update(buffer).digest("hex").slice(0, 12);
+  return { buffer, filename: `${String(index + 1).padStart(2, "0")}-${hash}${ext}` };
 }
 
 function normalizePostStatusForType(status = "", type = "sell") {
@@ -1083,6 +1150,56 @@ function addUserNotification(db, userId, message, tone = "buy") {
   return notification;
 }
 
+function removeUserData(db, targetId) {
+  const removedTradeKeys = new Set();
+  const isTargetPost = (post = {}) => ["userId", "counterpartyId", "settlementUserId", "escrowPayerId"].some((key) => post[key] === targetId);
+  const removePosts = (collection, type) => {
+    const rows = db[collection] || [];
+    db[collection] = rows.filter((post) => {
+      if (!isTargetPost(post)) return true;
+      removedTradeKeys.add(`${type}:${post.id}`);
+      return false;
+    });
+  };
+  removePosts("sellPosts", "sell");
+  removePosts("buyPosts", "buy");
+
+  const tradeRemoved = (row = {}) => row.postId && removedTradeKeys.has(`${row.tradeType}:${row.postId}`);
+  const supportRoomIds = new Set();
+  const directRoomIds = new Set();
+
+  (db.chatRooms || []).forEach((room) => {
+    if (room.userId === targetId || tradeRemoved(room)) {
+      supportRoomIds.add(room.id);
+      if (room.directRoomId) directRoomIds.add(room.directRoomId);
+    }
+  });
+
+  (db.directChatRooms || []).forEach((room) => {
+    if ((room.participantIds || []).includes(targetId) || room.ownerId === targetId || room.starterId === targetId || tradeRemoved(room) || supportRoomIds.has(room.supportRoomId)) {
+      directRoomIds.add(room.id);
+      if (room.supportRoomId) supportRoomIds.add(room.supportRoomId);
+    }
+  });
+
+  db.chatRooms = (db.chatRooms || []).filter((room) => !supportRoomIds.has(room.id) && room.userId !== targetId);
+  db.chatMessages = (db.chatMessages || []).filter((message) => !supportRoomIds.has(message.roomId) && message.userId !== targetId && message.staffId !== targetId);
+  db.directChatRooms = (db.directChatRooms || []).filter((room) => !directRoomIds.has(room.id) && !supportRoomIds.has(room.supportRoomId));
+  db.directChatMessages = (db.directChatMessages || []).filter((message) => !directRoomIds.has(message.roomId) && message.senderId !== targetId);
+  (db.directChatRooms || []).forEach((room) => {
+    if (room.unreadBy) delete room.unreadBy[targetId];
+    if (Array.isArray(room.participantIds)) room.participantIds = room.participantIds.filter((idValue) => idValue !== targetId);
+  });
+  (db.directChatMessages || []).forEach((message) => {
+    if (Array.isArray(message.readBy)) message.readBy = message.readBy.filter((idValue) => idValue !== targetId);
+  });
+
+  db.pointRequests = (db.pointRequests || []).filter((request) => request.userId !== targetId);
+  db.pointLedger = (db.pointLedger || []).filter((row) => row.userId !== targetId && row.counterpartyId !== targetId);
+  db.userNotifications = (db.userNotifications || []).filter((item) => item.userId !== targetId);
+  db.auditLogs = (db.auditLogs || []).filter((row) => row.staffId !== targetId && row.targetId !== targetId);
+}
+
 function tradeTypeLabel(type = "sell") {
   return type === "sell" ? "판매" : "구매";
 }
@@ -1103,6 +1220,16 @@ function normalizeInternalGrade(value = "") {
   if (!matched) return "1급";
   const grade = Math.min(10, Math.max(1, Number(matched[1])));
   return `${grade}급`;
+}
+
+function internalGradeNumber(value = "") {
+  const matched = String(normalizeInternalGrade(value)).match(/(\d+)/);
+  return matched ? Number(matched[1]) : 1;
+}
+
+function nextInternalGrade(value = "") {
+  const current = internalGradeNumber(value);
+  return `${current >= 10 ? 1 : current + 1}급`;
 }
 
 function tradeStatusLabel(status = "", type = "sell") {
@@ -2079,7 +2206,7 @@ function homePage(user, db) {
           <h2>안전한 게임 거래의 시작</h2>
           <label>아이디<input name="username" placeholder="아이디를 입력하세요" required></label>
           <label>비밀번호<input name="password" type="password" placeholder="비밀번호를 입력하세요" required></label>
-          <div class="login-row"><label class="auto-login"><input type="checkbox" name="autoLogin"> 자동로그인</label><a aria-disabled="true">아이디/비밀번호 찾기</a></div>
+          <div class="login-row"><label class="auto-login"><input type="checkbox" name="autoLogin"> 자동로그인</label><a href="/">아이디/비밀번호 찾기</a></div>
           <button>로그인</button>
           <p>아직 계정이 없으신가요? <a href="/signup">회원가입</a></p>
           <span class="form-message"></span>
@@ -2196,7 +2323,7 @@ function authPage(user, mode) {
       <h1>${isSignup ? "회원가입" : "로그인"}</h1>
       <input name="username" placeholder="아이디" required>
       <input name="password" type="password" placeholder="비밀번호" required>
-      <div class="auth-links"><a aria-disabled="true">아이디/비밀번호 찾기</a></div>
+      <div class="auth-links"><a href="/login">아이디/비밀번호 찾기</a></div>
       <button>${isSignup ? "가입하기" : "로그인"}</button>
       <p class="auth-join">아직 계정이 없으신가요? <a href="/signup">회원가입</a></p>
       <p class="form-message"></p>
@@ -2645,11 +2772,16 @@ function adminPage(user, db, paging = {}) {
     pointPage: pageNumber(paging.pointPage),
     pointSize: pageSize(paging.pointSize)
   };
-  const usersPaged = pagedItems(db.users || [], pageParams.userPage, pageParams.userSize);
+  const sortedUsers = (db.users || []).slice().sort((a, b) => String(b.createdAt || "").localeCompare(String(a.createdAt || "")));
+  const usersPaged = pagedItems(sortedUsers, pageParams.userPage, pageParams.userSize);
   pageParams.userPage = usersPaged.page;
   const pointRequestsPaged = pagedItems((db.pointRequests || []).slice().reverse(), pageParams.pointPage, pageParams.pointSize);
   pageParams.pointPage = pointRequestsPaged.page;
-  const users = usersPaged.items.map((u) => `<tr data-admin-user-row="${esc(u.id)}">
+  const users = usersPaged.items.map((u) => {
+    const deleteButton = u.role === "OWNER"
+      ? `<span class="admin-user-delete-disabled">-</span>`
+      : `<button type="button" class="admin-user-delete" data-admin-user-delete="${esc(u.id)}" data-admin-user-nickname="${esc(u.nickname || u.username || "회원")}">회원탈퇴</button>`;
+    return `<tr data-admin-user-row="${esc(u.id)}">
     <td>${onlineEditCell("username", u.username, isOnline(u))}</td>
     <td>${passwordCell()}</td>
     <td>${editCell("nickname", u.nickname)}</td>
@@ -2660,7 +2792,9 @@ function adminPage(user, db, paging = {}) {
     <td>${selectCell("internalGrade", normalizeInternalGrade(u.internalGrade), INTERNAL_GRADES)}</td>
     <td>${editCell("points", Number(u.points || 0), "number")}</td>
     <td><div class="admin-user-actions"><button type="button" class="admin-row-save" data-admin-user-save="${esc(u.id)}">저장</button><button type="button" data-admin-user-logout="${esc(u.id)}">로그아웃</button><button type="button" data-admin-user-ip="${esc(u.id)}">IP</button></div></td>
-  </tr>`).join("");
+    <td>${deleteButton}</td>
+  </tr>`;
+  }).join("");
   const reqs = pointRequestsPaged.items.map((r) => {
     const member = db.users.find((u) => u.id === r.userId);
     const status = String(r.status || "대기");
@@ -2756,15 +2890,17 @@ function adminPage(user, db, paging = {}) {
       </form>
       <ul class="admin-notice-list">${latestNotices}</ul>
     </section>
-    <section class="panel table-panel"><h2>회원 개인정보/등급 관리</h2><table><thead><tr><th>ID</th><th>비밀번호</th><th>닉네임</th><th>전화</th><th>이름</th><th>권한</th><th>표시등급</th><th>내부등급</th><th>마일리지</th><th></th></tr></thead><tbody>${users || "<tr><td colspan='10'>회원 내역이 없습니다.</td></tr>"}</tbody></table>${usersPager}</section>
+    <section class="panel table-panel admin-member-panel"><h2>회원 개인정보/등급 관리</h2><table class="admin-member-table"><thead><tr><th>ID</th><th>비밀번호</th><th>닉네임</th><th>전화</th><th>이름</th><th>권한</th><th>표시등급</th><th>내부등급</th><th>마일리지</th><th></th><th>회원탈퇴</th></tr></thead><tbody>${users || "<tr><td colspan='11'>회원 내역이 없습니다.</td></tr>"}</tbody></table>${usersPager}</section>
     <span id="pointRequests" class="admin-scroll-anchor"></span><section class="panel table-panel point-request-panel"><div class="panel-head"><h2>충전/출금 신청</h2><a href="${adminPageHref(pageParams, {}, "pointRequests")}" class="admin-refresh-button">새로고침</a></div><table><thead><tr><th>구분</th><th>닉네임</th><th>이름</th><th>금액</th><th>출금계좌</th><th>신청/처리</th><th>상태</th><th></th></tr></thead><tbody>${reqs || "<tr><td colspan='8'>신청 내역이 없습니다.</td></tr>"}</tbody></table>${pointPager}</section>
   </main>`, "admin");
 }
 
 function staffPage(user) {
   return layout("상담사", user, `<main class="staff-page">
-    <aside class="chat-list"><h1>상담함 <span id="roomCount">0</span></h1><div id="staffRooms"></div></aside>
-    <section class="staff-chat"><div class="room-meta"><span id="staffRoomMeta">상담방을 선택하세요.</span><button type="button" id="staffClearRoom" disabled>채팅방 비우기</button></div><div id="staffMessages" class="chat-log"></div><form id="staffSend" class="staff-send-form"><input id="staffChatFileInput" type="file" accept="image/*" hidden><textarea name="message" rows="1" placeholder="답변 입력" autocomplete="off"></textarea><button type="button" id="staffChatAttach">사진</button><div id="staffChatAttachmentPreview" class="staff-attachment-preview"></div><button>전송</button></form></section>
+    <aside class="chat-list chat-list--pinned"><h1>중요상담함 <span id="pinnedRoomCount">0</span></h1><div id="staffPinnedRooms"></div></aside>
+    <aside class="chat-list chat-list--normal"><h1>일반상담함 <span id="roomCount">0</span></h1><div id="staffRooms"></div></aside>
+    <section class="staff-chat"><div class="room-meta"><span id="staffRoomMeta">상담방을 선택하세요.</span><button type="button" id="staffClearRoom" disabled>채팅방 비우기</button></div><div id="staffMessages" class="chat-log"></div><form id="staffSend" class="staff-send-form"><input id="staffChatFileInput" type="file" accept="image/*" hidden><textarea name="message" rows="1" placeholder="답변 입력" autocomplete="off"></textarea><div class="staff-preview-speaker" id="staffPreviewSpeaker" hidden><button type="button" data-preview-speaker="staff" class="active">상담사</button><button type="button" data-preview-speaker="member">회원</button></div><button type="button" id="staffChatAttach">사진</button><div id="staffChatAttachmentPreview" class="staff-attachment-preview"></div><button>전송</button></form></section>
+    <section class="chat-widget staff-member-preview-panel" id="staffMemberPreviewPanel" aria-label="회원 고객센터 미리보기"><header class="member-chat-head staff-member-preview-title"><b>미리보기</b></header><div id="staffMemberPreviewLog" class="chat-log member-chat-log staff-member-preview-log"></div><form id="staffMemberPreviewSend" class="member-chat-send staff-member-preview-send"><input id="staffMemberPreviewFileInput" type="file" accept="image/*" hidden><div class="chat-composer"><textarea name="message" rows="1" placeholder="메시지를 입력해주세요." autocomplete="off"></textarea><div class="chat-tools"><button type="button" id="staffMemberPreviewAttach" aria-label="파일첨부">📎</button></div><div id="staffMemberPreviewAttachmentPreview" class="chat-attachment-preview"></div><button class="chat-send-button" type="submit" aria-label="전송"><img src="/assets/chat/send-idle.png" alt=""></button></div></form></section>
   </main>`, "staff");
 }
 
@@ -2932,6 +3068,54 @@ async function api(req, res, db, user, pathname) {
         lastIpAt: target.lastIpAt || "",
         ipHistory: (target.ipHistory || []).slice(0, 10)
       });
+    }
+    if (pathname === "/api/admin/import-images" && req.method === "POST") {
+      if (!protect(user, "admin")) return send(res, 403, { error: "권한이 없습니다." });
+      const data = await body(req);
+      const itemKey = safeImportPathPart(data.itemKey || data.itemId || "item");
+      const files = Array.isArray(data.files) ? data.files.slice(0, 10) : [];
+      if (!files.length) return send(res, 200, { ok: true, urls: [] });
+      const itemDir = path.join(IMPORT_UPLOAD_DIR, itemKey);
+      await mkdir(itemDir, { recursive: true });
+      const urls = [];
+      for (const [index, file] of files.entries()) {
+        const image = importImagePayload(file, index);
+        const filePath = path.join(itemDir, image.filename);
+        await writeFile(filePath, image.buffer);
+        urls.push(`/uploads/imported/${itemKey}/${image.filename}`);
+      }
+      return send(res, 200, { ok: true, urls });
+    }
+    if (pathname === "/api/admin/trades/import" && req.method === "POST") {
+      if (!protect(user, "admin")) return send(res, 403, { error: "권한이 없습니다." });
+      const data = await body(req);
+      const posts = Array.isArray(data.posts) ? data.posts.slice(0, 100) : [];
+      if (!posts.length) return send(res, 400, { error: "등록할 글이 없습니다." });
+      const imported = [];
+      const skipped = [];
+      const failures = [];
+      for (const [index, post] of posts.entries()) {
+        const itemKey = String(post.itemKey || post.importSourceKey || "").trim();
+        const type = post.type === "buy" ? "buy" : "sell";
+        const collection = db[type === "sell" ? "sellPosts" : "buyPosts"] ||= [];
+        if (itemKey && collection.some((row) => row.importSourceKey === itemKey)) {
+          skipped.push({ index, itemKey, reason: "already imported" });
+          continue;
+        }
+        const built = adminImportTradeRow(db, user, post);
+        if (built.error) {
+          failures.push({ index, itemKey, error: built.error });
+          continue;
+        }
+        if (built.state !== "open") {
+          failures.push({ index, itemKey, error: "대량 등록은 미거래중 상태만 지원합니다." });
+          continue;
+        }
+        collection.push(built.row);
+        imported.push({ index, itemKey, id: built.row.id, type: built.type, gameSlug: built.row.gameSlug, title: built.row.title });
+      }
+      if (imported.length) await writeDb(db);
+      return send(res, 200, { ok: failures.length === 0, imported, skipped, failures });
     }
     if (pathname === "/api/admin/trade" && req.method === "POST") {
       if (!protect(user, "admin")) return send(res, 403, { error: "권한이 없습니다." });
@@ -3277,6 +3461,19 @@ async function api(req, res, db, user, pathname) {
       await writeDb(db);
       return send(res, 200, { ok: true });
     }
+    if (pathname === "/api/admin/user/delete" && req.method === "POST") {
+      if (!protect(user, "admin")) return send(res, 403, { error: "권한이 없습니다." });
+      const data = await body(req);
+      const target = db.users.find((item) => item.id === data.id);
+      if (!target) return send(res, 404, { error: "회원을 찾을 수 없습니다." });
+      if (target.role === "OWNER") return send(res, 403, { error: "오너 계정은 탈퇴 처리할 수 없습니다." });
+      const targetId = target.id;
+      db.users = (db.users || []).filter((item) => item.id !== targetId);
+      removeUserData(db, targetId);
+      audit(db, user, "USER_DELETE", targetId);
+      await writeDb(db);
+      return send(res, 200, { ok: true });
+    }
     if (pathname === "/api/admin/staff" && req.method === "POST") {
       if (user?.role !== "OWNER") return send(res, 403, { error: "챌린저 계정만 운영진을 생성할 수 있습니다." });
       const data = await body(req);
@@ -3513,11 +3710,134 @@ async function api(req, res, db, user, pathname) {
     }
     if (pathname === "/api/chat/staff" && req.method === "GET") {
       if (!protect(user, "staff")) return send(res, 403, { error: "권한이 없습니다." });
-      const rooms = db.chatRooms.filter((r) => r.adminManagedTrade || db.chatMessages.some((m) => m.roomId === r.id)).map((r) => {
+      const rooms = (db.chatRooms || []).filter((r) => r.adminManagedTrade || db.chatMessages.some((m) => m.roomId === r.id)).map((r) => {
         const member = db.users.find((u) => u.id === r.userId);
-        return { ...r, memberName: member?.nickname, username: member?.username, realName: member?.name || "", name: member?.name || "", displayGrade: member?.displayGrade, internalGrade: normalizeInternalGrade(member?.internalGrade), adminManagedTrade: Boolean(r.adminManagedTrade), tradeTitle: r.tradeTitle || "" };
+        const internalGrade = normalizeInternalGrade(member?.internalGrade);
+        return { ...r, pinned: Boolean(r.pinned), memberId: member?.id || r.userId, memberName: member?.nickname, username: member?.username, realName: member?.name || "", name: member?.name || "", displayGrade: member?.displayGrade, internalGrade, isHighInternalGrade: internalGradeNumber(internalGrade) >= 3, adminManagedTrade: Boolean(r.adminManagedTrade), tradeTitle: r.tradeTitle || "" };
       }).sort((a, b) => String(b.lastAt).localeCompare(String(a.lastAt)));
       return send(res, 200, { rooms });
+    }
+    if (pathname === "/api/chat/staff-preview" && req.method === "GET") {
+      if (!protect(user, "staff")) return send(res, 403, { error: "권한이 없습니다." });
+      db.site ||= {};
+      db.site.staffPreviewChatMessages ||= [];
+      return send(res, 200, { messages: db.site.staffPreviewChatMessages });
+    }
+    if (pathname === "/api/chat/staff-preview" && req.method === "POST") {
+      if (!protect(user, "staff")) return send(res, 403, { error: "권한이 없습니다." });
+      const data = await body(req);
+      const text = String(data.message || "").trim();
+      const senderType = data.senderType === "member" ? "member" : "staff";
+      const attachment = data.attachment;
+      const isImage = attachment?.type?.startsWith?.("image/") && String(attachment.dataUrl || "").startsWith("data:image/");
+      const file = attachment?.name && isImage ? { name: String(attachment.name), type: String(attachment.type || ""), size: Number(attachment.size || 0), dataUrl: String(attachment.dataUrl) } : null;
+      if (!text && !file) return send(res, 400, { error: "메시지를 입력하세요." });
+      db.site ||= {};
+      db.site.staffPreviewChatMessages ||= [];
+      db.site.staffPreviewChatMessages.push({ id: id("preview"), senderType, displayName: senderType === "staff" ? "아이템존 상담사" : "회원", message: text, attachment: file, createdAt: now() });
+      await writeDb(db);
+      return send(res, 200, { ok: true });
+    }
+    if (pathname === "/api/chat/staff-preview/edit-message" && req.method === "POST") {
+      if (!protect(user, "staff")) return send(res, 403, { error: "권한이 없습니다." });
+      const data = await body(req);
+      const text = String(data.message || "").trim();
+      if (!text) return send(res, 400, { error: "메시지를 입력하세요." });
+      db.site ||= {};
+      db.site.staffPreviewChatMessages ||= [];
+      const message = db.site.staffPreviewChatMessages.find((item) => item.id === data.id);
+      if (!message) return send(res, 404, { error: "수정할 메시지가 없습니다." });
+      message.message = text;
+      message.editedAt = now();
+      message.editedBy = user.id;
+      await writeDb(db);
+      return send(res, 200, { ok: true });
+    }
+    if (pathname === "/api/chat/staff-preview/delete-message" && req.method === "POST") {
+      if (!protect(user, "staff")) return send(res, 403, { error: "권한이 없습니다." });
+      const data = await body(req);
+      db.site ||= {};
+      db.site.staffPreviewChatMessages ||= [];
+      db.site.staffPreviewChatMessages = db.site.staffPreviewChatMessages.filter((item) => item.id !== data.id);
+      await writeDb(db);
+      return send(res, 200, { ok: true });
+    }
+    if (pathname === "/api/chat/staff-preview/clear" && req.method === "POST") {
+      if (!protect(user, "staff")) return send(res, 403, { error: "권한이 없습니다." });
+      db.site ||= {};
+      db.site.staffPreviewChatMessages = [];
+      await writeDb(db);
+      return send(res, 200, { ok: true });
+    }
+    if (pathname.startsWith("/api/chat/staff/") && pathname.endsWith("/pin") && req.method === "POST") {
+      if (!protect(user, "staff")) return send(res, 403, { error: "권한이 없습니다." });
+      const roomId = pathname.split("/").at(-2);
+      const room = db.chatRooms.find((r) => r.id === roomId);
+      if (!room) return send(res, 404, { error: "상담방 없음" });
+      const data = await body(req);
+      room.pinned = Boolean(data.pinned);
+      room.pinnedAt = room.pinned ? now() : null;
+      room.pinnedBy = room.pinned ? user.id : null;
+      audit(db, user, room.pinned ? "CHAT_ROOM_PIN" : "CHAT_ROOM_UNPIN", room.id);
+      await writeDb(db);
+      return send(res, 200, { ok: true, pinned: room.pinned });
+    }
+    if (pathname.startsWith("/api/chat/staff/") && pathname.endsWith("/leave") && req.method === "POST") {
+      if (!protect(user, "staff")) return send(res, 403, { error: "권한이 없습니다." });
+      const roomId = pathname.split("/").at(-2);
+      const room = db.chatRooms.find((r) => r.id === roomId);
+      if (!room) return send(res, 404, { error: "상담방 없음" });
+      const beforeMessages = db.chatMessages.length;
+      db.chatMessages = db.chatMessages.filter((m) => m.roomId !== room.id);
+      db.chatRooms = db.chatRooms.filter((r) => r.id !== room.id);
+      if (Array.isArray(db.directChatRooms)) db.directChatRooms = db.directChatRooms.filter((r) => r.supportRoomId !== room.id && r.id !== room.directRoomId);
+      audit(db, user, "CHAT_ROOM_LEAVE_DELETE", `${room.id}:${beforeMessages - db.chatMessages.length}`);
+      await writeDb(db);
+      return send(res, 200, { ok: true });
+    }
+    if (pathname.startsWith("/api/chat/staff/") && pathname.endsWith("/internal-grade-cycle") && req.method === "POST") {
+      if (!protect(user, "staff")) return send(res, 403, { error: "권한이 없습니다." });
+      const roomId = pathname.split("/").at(-2);
+      const room = db.chatRooms.find((r) => r.id === roomId);
+      if (!room) return send(res, 404, { error: "상담방 없음" });
+      const member = db.users.find((u) => u.id === room.userId);
+      if (!member) return send(res, 404, { error: "회원 없음" });
+      member.internalGrade = nextInternalGrade(member.internalGrade);
+      audit(db, user, "USER_INTERNAL_GRADE_CYCLE", member.id);
+      await writeDb(db);
+      return send(res, 200, { ok: true, internalGrade: member.internalGrade });
+    }
+    if (pathname.startsWith("/api/chat/staff/") && pathname.endsWith("/edit-message") && req.method === "POST") {
+      if (!protect(user, "staff")) return send(res, 403, { error: "권한이 없습니다." });
+      const roomId = pathname.split("/").at(-2);
+      const room = db.chatRooms.find((r) => r.id === roomId);
+      if (!room) return send(res, 404, { error: "상담방 없음" });
+      const data = await body(req);
+      const text = String(data.message || "").trim();
+      if (!text) return send(res, 400, { error: "메시지를 입력하세요." });
+      const message = db.chatMessages.find((m) => m.id === data.id && m.roomId === room.id);
+      if (!message) return send(res, 404, { error: "수정할 메시지가 없습니다." });
+      message.message = text;
+      message.editedAt = now();
+      message.editedBy = user.id;
+      const latest = db.chatMessages.filter((m) => m.roomId === room.id).at(-1);
+      room.lastMessage = latest ? latest.message || (latest.attachment ? `첨부파일: ${latest.attachment.name}` : "") : "";
+      room.lastAt = latest?.createdAt || now();
+      audit(db, user, "CHAT_MESSAGE_EDIT", message.id);
+      await writeDb(db);
+      return send(res, 200, { ok: true });
+    }
+    if (pathname.startsWith("/api/chat/staff/") && pathname.endsWith("/member-message") && req.method === "POST") {
+      if (!protect(user, "staff")) return send(res, 403, { error: "권한이 없습니다." });
+      const roomId = pathname.split("/").at(-2);
+      const room = db.chatRooms.find((r) => r.id === roomId);
+      if (!room) return send(res, 404, { error: "상담방 없음" });
+      const member = db.users.find((u) => u.id === room.userId);
+      if (!member) return send(res, 404, { error: "회원 없음" });
+      const data = await body(req);
+      addMessage(db, room, member, "member", data.message, data.attachment);
+      await writeDb(db);
+      return send(res, 200, { ok: true });
     }
     if (pathname.startsWith("/api/chat/staff/") && pathname.endsWith("/delete-message") && req.method === "POST") {
       if (!protect(user, "staff")) return send(res, 403, { error: "권한이 없습니다." });
