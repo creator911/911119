@@ -38,6 +38,11 @@ const PG_COLLECTIONS = [
 ];
 const PUBLIC_SEED_PATH = path.join(DATA_DIR, "public-seed.json");
 const PUBLIC_DIR = path.join(__dirname, "public");
+const SITE_ORIGIN = (process.env.SITE_ORIGIN || "http://64.176.229.125:3000").replace(/\/+$/, "");
+const LINK_PREVIEW_TITLE = "\uC544\uC774\uD15C\uC874";
+const LINK_PREVIEW_DESCRIPTION = "\uC548\uC804\uD55C \uAC8C\uC784 \uC544\uC774\uD15C \uAC70\uB798 \uD50C\uB7AB\uD3FC";
+const LINK_PREVIEW_IMAGE_PATH = "/assets/preview/itemzone-link-preview.png";
+const LINK_PREVIEW_IMAGE_URL = `${SITE_ORIGIN}${LINK_PREVIEW_IMAGE_PATH}`;
 const IMPORT_UPLOAD_DIR = path.join(PUBLIC_DIR, "uploads", "imported");
 const LEGAL_DIR = path.join(DATA_DIR, "legal");
 const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -2132,6 +2137,17 @@ function layout(title, user, content, page = "home") {
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>${pageTitle}</title>
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="${esc(LINK_PREVIEW_TITLE)}">
+  <meta property="og:title" content="${esc(LINK_PREVIEW_TITLE)}">
+  <meta property="og:description" content="${esc(LINK_PREVIEW_DESCRIPTION)}">
+  <meta property="og:image" content="${esc(LINK_PREVIEW_IMAGE_URL)}">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="${esc(LINK_PREVIEW_TITLE)}">
+  <meta name="twitter:description" content="${esc(LINK_PREVIEW_DESCRIPTION)}">
+  <meta name="twitter:image" content="${esc(LINK_PREVIEW_IMAGE_URL)}">
   <link rel="icon" type="image/png" href="/favicon.png">
   <link rel="stylesheet" href="/styles.css">${previewCss}
 </head>
