@@ -38,11 +38,13 @@ const PG_COLLECTIONS = [
 ];
 const PUBLIC_SEED_PATH = path.join(DATA_DIR, "public-seed.json");
 const PUBLIC_DIR = path.join(__dirname, "public");
-const SITE_ORIGIN = (process.env.SITE_ORIGIN || "http://64.176.229.125:3000").replace(/\/+$/, "");
+const SITE_ORIGIN = (process.env.SITE_ORIGIN || "https://www.itemzone.co.kr").replace(/\/+$/, "");
 const LINK_PREVIEW_TITLE = "\uC544\uC774\uD15C\uC874";
 const LINK_PREVIEW_DESCRIPTION = "\uC548\uC804\uD55C \uAC8C\uC784 \uC544\uC774\uD15C \uAC70\uB798 \uD50C\uB7AB\uD3FC";
 const LINK_PREVIEW_IMAGE_PATH = "/assets/preview/itemzone-link-preview.png";
 const LINK_PREVIEW_IMAGE_URL = `${SITE_ORIGIN}${LINK_PREVIEW_IMAGE_PATH}`;
+const SEO_HOME_TITLE = "아이템존 - 게임 아이템 계정 거래 플렛폼";
+const SEO_DESCRIPTION = "아이템존은 안전한 게임 아이템, 게임머니, 계정 거래 플렛폼입니다.";
 const IMPORT_UPLOAD_DIR = path.join(PUBLIC_DIR, "uploads", "imported");
 const LEGAL_DIR = path.join(DATA_DIR, "legal");
 const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -805,6 +807,55 @@ function noticePosts(db) {
     if (Boolean(a.pinned) !== Boolean(b.pinned)) return a.pinned ? -1 : 1;
     return String(b.createdAt).localeCompare(String(a.createdAt));
   });
+}
+
+function xmlEsc(value = "") {
+  return String(value).replace(/[<>&'"]/g, (char) => ({
+    "<": "&lt;",
+    ">": "&gt;",
+    "&": "&amp;",
+    "'": "&apos;",
+    "\"": "&quot;"
+  })[char]);
+}
+
+function siteUrl(pathname = "/") {
+  const safePath = String(pathname || "/").startsWith("/") ? String(pathname || "/") : `/${pathname}`;
+  return `${SITE_ORIGIN}${safePath}`;
+}
+
+function sitemapDate(value = "") {
+  const date = new Date(value || "");
+  return Number.isNaN(date.getTime()) ? "" : date.toISOString();
+}
+
+function sitemapEntry(pathname, options = {}) {
+  const lastmod = sitemapDate(options.lastmod);
+  return `  <url>
+    <loc>${xmlEsc(siteUrl(pathname))}</loc>${lastmod ? `\n    <lastmod>${lastmod}</lastmod>` : ""}${options.changefreq ? `\n    <changefreq>${xmlEsc(options.changefreq)}</changefreq>` : ""}${options.priority ? `\n    <priority>${xmlEsc(options.priority)}</priority>` : ""}
+  </url>`;
+}
+
+function sitemapXml(db) {
+  const urls = [
+    sitemapEntry("/", { changefreq: "daily", priority: "1.0" }),
+    sitemapEntry("/games", { changefreq: "daily", priority: "0.9" }),
+    sitemapEntry("/notices", { changefreq: "weekly", priority: "0.7" }),
+    sitemapEntry("/support", { changefreq: "monthly", priority: "0.5" }),
+    sitemapEntry("/terms", { changefreq: "yearly", priority: "0.3" }),
+    sitemapEntry("/trade-terms", { changefreq: "yearly", priority: "0.3" }),
+    sitemapEntry("/privacy", { changefreq: "yearly", priority: "0.3" }),
+    ...(db.games || [])
+      .filter((game) => game.visible !== false && game.slug)
+      .map((game) => sitemapEntry(`/games/${encodeURIComponent(game.slug)}`, { changefreq: "weekly", priority: "0.8" })),
+    ...noticePosts(db)
+      .filter((post) => post.id)
+      .map((post) => sitemapEntry(`/notices/${encodeURIComponent(post.id)}`, { lastmod: post.createdAt, changefreq: "monthly", priority: "0.6" }))
+  ];
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+${urls.join("\n")}
+</urlset>`;
 }
 
 function noticeLabelHtml(post = {}) {
@@ -2106,7 +2157,26 @@ function tradeDetailPage(user, db, type, postId) {
 }
 
 function layout(title, user, content, page = "home") {
-  const pageTitle = page === "home" && title === "홈" ? "아이템존 - 신뢰의 No.1" : `${title} - 아이템존`;
+  const isHomePage = page === "home" && title === "홈";
+  const pageTitle = isHomePage ? SEO_HOME_TITLE : `${title} - 아이템존`;
+  const canonicalTag = isHomePage ? `\n  <link rel="canonical" href="${esc(`${SITE_ORIGIN}/`)}">` : "";
+  const structuredData = isHomePage ? `\n  <script type="application/ld+json">${JSON.stringify([
+    {
+      "@context": "https://schema.org",
+      "@type": "Organization",
+      name: "아이템존",
+      alternateName: "ItemZone",
+      url: `${SITE_ORIGIN}/`,
+      logo: `${SITE_ORIGIN}/assets/logo/itemzone-logo.png`
+    },
+    {
+      "@context": "https://schema.org",
+      "@type": "WebSite",
+      name: "아이템존",
+      alternateName: "ItemZone",
+      url: `${SITE_ORIGIN}/`
+    }
+  ]).replace(/</g, "\\u003c")}</script>` : "";
   const previewClass = MOBILE_PREVIEW ? " class=\"mobile-preview mobile-preview-debug\"" : "";
   const previewCss = MOBILE_PREVIEW
     ? "\n  <link rel=\"stylesheet\" href=\"/mobile-preview.css?v=mobile-preview-26\">"
@@ -2137,6 +2207,7 @@ function layout(title, user, content, page = "home") {
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>${pageTitle}</title>
+  <meta name="description" content="${esc(SEO_DESCRIPTION)}">${canonicalTag}
   <meta property="og:type" content="website">
   <meta property="og:site_name" content="${esc(LINK_PREVIEW_TITLE)}">
   <meta property="og:title" content="${esc(LINK_PREVIEW_TITLE)}">
@@ -2148,6 +2219,7 @@ function layout(title, user, content, page = "home") {
   <meta name="twitter:title" content="${esc(LINK_PREVIEW_TITLE)}">
   <meta name="twitter:description" content="${esc(LINK_PREVIEW_DESCRIPTION)}">
   <meta name="twitter:image" content="${esc(LINK_PREVIEW_IMAGE_URL)}">
+  ${structuredData}
   <link rel="icon" type="image/png" href="/favicon.png">
   <link rel="stylesheet" href="/styles.css">${previewCss}
 </head>
@@ -4099,6 +4171,7 @@ async function router(req, res) {
   }
   await rememberUserIp(db, user, requestIp);
   if (url.pathname.startsWith("/api/")) return api(req, res, db, user, url.pathname);
+  if (url.pathname === "/sitemap.xml") return send(res, 200, sitemapXml(db), { "Content-Type": "application/xml; charset=utf-8" });
   if (url.pathname === "/") return send(res, 200, homePage(user, db));
   if (url.pathname === "/login") return send(res, 200, authPage(user, "login"));
   if (url.pathname === "/signup") return send(res, 200, authPage(user, "signup"));
