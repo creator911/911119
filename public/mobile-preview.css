@@ -1579,7 +1579,7 @@ body.mobile-preview.mobile-preview-debug::before {
   body.mobile-preview .account-image-link {
     width: auto !important;
     min-width: 0;
-    height: 28px;
+    height: 28px !important;
     min-height: 28px !important;
     padding: 0 7px !important;
     background: transparent !important;
