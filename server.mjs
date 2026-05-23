@@ -1116,7 +1116,7 @@ function refundTradeEscrow(db, post, type) {
 function notifyTradeCompleted(db, post, type) {
   const actionLabel = type === "sell" ? "판매" : "구매";
   const title = post.title || "거래 상품";
-  const toast = `${title} 상품이 ${actionLabel} 완료되었습니다. 마일리지를 확인해 주세요.`;
+  const toast = `${title} 상품이 ${actionLabel} 완료되었습니다.\n마일리지를 확인해 주세요.`;
   const chatMessage = `${title}\n거래가 완료되었습니다.\n마일리지를 확인해 주세요.`;
   const tone = type === "sell" ? "sell" : "buy";
   if (post.adminManaged) {

@@ -365,6 +365,7 @@ form button, .panel button {
   color: #15803d;
   font-weight: 900;
   text-align: center;
+  white-space: pre-line;
   transform: translate(-50%, -120%);
   opacity: 0;
   pointer-events: none;
