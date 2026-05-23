@@ -1522,6 +1522,7 @@ body.mobile-preview.mobile-preview-debug::before {
   }
 
   body.mobile-preview .top-inner {
+    position: relative;
     grid-template-columns: auto minmax(0, 1fr);
     align-items: center;
     gap: 7px 8px;
@@ -1541,12 +1542,12 @@ body.mobile-preview.mobile-preview-debug::before {
   }
 
   body.mobile-preview .account {
-    grid-column: 2;
-    grid-row: 1;
+    position: absolute;
+    top: 9px;
+    right: 10px;
     order: initial;
-    justify-self: end;
     justify-content: flex-end;
-    max-width: 100%;
+    max-width: calc(100vw - 176px);
     gap: 5px;
     overflow-x: auto;
   }
@@ -1568,10 +1569,20 @@ body.mobile-preview.mobile-preview-debug::before {
   body.mobile-preview .account-image-link[href="/login"]::before,
   body.mobile-preview .account-image-link[href="/signup"]::before {
     font-weight: 900;
+    line-height: 28px;
   }
 
   body.mobile-preview .account-image-link img {
-    height: 34px;
+    display: none !important;
+  }
+
+  body.mobile-preview .account-image-link {
+    width: auto !important;
+    min-width: 0;
+    height: 28px;
+    min-height: 28px !important;
+    padding: 0 7px !important;
+    background: transparent !important;
   }
 
   body.mobile-preview .account button[data-action="logout"] {
