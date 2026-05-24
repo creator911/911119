@@ -858,6 +858,71 @@ ${urls.join("\n")}
 </urlset>`;
 }
 
+function robotsTxt() {
+  return `# As a condition of accessing this website, you agree to abide by the following
+# content signals:
+
+# (a)  If a Content-Signal = yes, you may collect content for the corresponding
+#      use.
+# (b)  If a Content-Signal = no, you may not collect content for the
+#      corresponding use.
+# (c)  If the website operator does not include a Content-Signal for a
+#      corresponding use, the website operator neither grants nor restricts
+#      permission via Content-Signal with respect to the corresponding use.
+
+# The content signals and their meanings are:
+
+# search:   building a search index and providing search results (e.g., returning
+#           hyperlinks and short excerpts from your website's contents). Search does not
+#           include providing AI-generated search summaries.
+# ai-input: inputting content into one or more AI models (e.g., retrieval
+#           augmented generation, grounding, or other real-time taking of content for
+#           generative AI search answers).
+# ai-train: training or fine-tuning AI models.
+
+# ANY RESTRICTIONS EXPRESSED VIA CONTENT SIGNALS ARE EXPRESS RESERVATIONS OF
+# RIGHTS UNDER ARTICLE 4 OF THE EUROPEAN UNION DIRECTIVE 2019/790 ON COPYRIGHT
+# AND RELATED RIGHTS IN THE DIGITAL SINGLE MARKET.
+
+# BEGIN Cloudflare Managed content
+
+User-agent: *
+Content-Signal: search=yes,ai-train=no
+Allow: /
+
+User-agent: Amazonbot
+Disallow: /
+
+User-agent: Applebot-Extended
+Disallow: /
+
+User-agent: Bytespider
+Disallow: /
+
+User-agent: CCBot
+Disallow: /
+
+User-agent: ClaudeBot
+Disallow: /
+
+User-agent: CloudflareBrowserRenderingCrawler
+Disallow: /
+
+User-agent: Google-Extended
+Disallow: /
+
+User-agent: GPTBot
+Disallow: /
+
+User-agent: meta-externalagent
+Disallow: /
+
+# END Cloudflare Managed Content
+
+Sitemap: ${SITE_ORIGIN}/sitemap.xml
+`;
+}
+
 function noticeLabelHtml(post = {}) {
   const labels = [];
   if (post.noticeInfo) labels.push(["info", "안내"]);
@@ -4247,6 +4312,7 @@ async function router(req, res) {
   }
   await rememberUserIp(db, user, requestIp);
   if (url.pathname.startsWith("/api/")) return api(req, res, db, user, url.pathname);
+  if (url.pathname === "/robots.txt") return send(res, 200, robotsTxt(), { "Content-Type": "text/plain; charset=utf-8" });
   if (url.pathname === "/sitemap.xml") return send(res, 200, sitemapXml(db), { "Content-Type": "application/xml; charset=utf-8" });
   if (url.pathname === "/") return send(res, 200, homePage(user, db));
   if (url.pathname === "/login") return send(res, 200, authPage(user, "login"));
