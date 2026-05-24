@@ -1208,7 +1208,7 @@ function setAvailability(form, field, state, text) {
 async function checkAvailability(form, field) {
   const input = form.elements[field];
   const value = input?.value.trim();
-  if (!value) {
+  if (!value || (field === "username" && value.length < 5)) {
     signupAvailability.set(field, false);
     setAvailability(form, field, "", "입력 대기");
     return false;
@@ -1251,19 +1251,64 @@ function signupPhoneValue(form) {
 }
 
 function signupPhoneReady(form) {
-  return Boolean(form.elements.phoneMid?.value.length === 4 && form.elements.phoneLast?.value.length === 4);
+  return Boolean(form.elements.phoneCarrier?.value && form.elements.phoneMid?.value.length === 4 && form.elements.phoneLast?.value.length === 4);
+}
+
+function signupRequiredTermsAccepted(form) {
+  const requiredTerms = $$("[data-signup-required-term]", form);
+  return requiredTerms.length > 0 && requiredTerms.every((input) => input.checked);
+}
+
+function signupFraudVerified(form) {
+  return form.dataset.fraudChecked === "true" && form.dataset.fraudPhone === signupPhoneValue(form);
+}
+
+function updateSignupSubmitState(form) {
+  const registerButton = $("#register-btn", form);
+  if (!registerButton) return;
+  registerButton.disabled = !signupFraudVerified(form);
+}
+
+function updateSignupTermsState(form) {
+  const requiredTerms = $$("[data-signup-required-term]", form);
+  const optionalTerms = $$("[data-signup-optional-term]", form);
+  const allTerms = [...requiredTerms, ...optionalTerms];
+  const allChecked = allTerms.length > 0 && allTerms.every((input) => input.checked);
+  const requiredChecked = signupRequiredTermsAccepted(form);
+  const agreeAll = $("[data-signup-agree-all]", form);
+  const nextButton = $('[data-signup-next="3"]', form);
+  if (agreeAll) {
+    agreeAll.checked = allChecked;
+    agreeAll.indeterminate = !allChecked && allTerms.some((input) => input.checked);
+  }
+  if (nextButton) nextButton.disabled = !requiredChecked;
+}
+
+function setSignupStep(form, step) {
+  const nextStep = String(step);
+  form.dataset.signupCurrentStep = nextStep;
+  $$("[data-signup-panel]", form).forEach((panel) => {
+    panel.hidden = panel.dataset.signupPanel !== nextStep;
+  });
+  $$("[data-step-marker]", form).forEach((marker) => {
+    const markerStep = Number(marker.dataset.stepMarker || 0);
+    marker.classList.toggle("active", markerStep === Number(nextStep));
+    marker.classList.toggle("completed", markerStep < Number(nextStep));
+  });
+  updateSignupTermsState(form);
+  updateSignupSubmitState(form);
+  window.scrollTo({ top: 0, behavior: "auto" });
 }
 
 function setSignupFraudChecked(form, checked = false) {
   form.dataset.fraudChecked = checked ? "true" : "false";
   form.dataset.fraudPhone = checked ? signupPhoneValue(form) : "";
-  const registerButton = $("#register-btn", form);
-  if (registerButton) registerButton.disabled = !checked;
   const state = $("[data-fraud-check-state]", form);
   if (state) {
     state.className = `desc ${checked ? "ok" : ""}`;
     state.textContent = checked ? "사기번호조회가 완료되었습니다." : "핸드폰번호 입력 후 사기번호조회를 진행해주세요.";
   }
+  updateSignupSubmitState(form);
 }
 
 function updateSignupFraudButton(form) {
@@ -1271,7 +1316,8 @@ function updateSignupFraudButton(form) {
   if (!button) return;
   const currentPhone = signupPhoneValue(form);
   if (form.dataset.fraudChecked === "true" && form.dataset.fraudPhone !== currentPhone) setSignupFraudChecked(form, false);
-  button.disabled = !signupPhoneReady(form);
+  button.disabled = !signupPhoneReady(form) || signupFraudVerified(form);
+  updateSignupSubmitState(form);
 }
 
 function openFraudCheckModal(form) {
@@ -1331,6 +1377,37 @@ function openTradeFraudModal() {
 
 const signupForm = $('form[data-form="signup"]');
 if (signupForm) {
+  setSignupStep(signupForm, Number(signupForm.dataset.signupCurrentStep || 1));
+  $$("[data-signup-next], [data-signup-prev]", signupForm).forEach((button) => {
+    button.addEventListener("click", () => {
+      const targetStep = button.dataset.signupNext || button.dataset.signupPrev;
+      if (!targetStep) return;
+      if (targetStep === "3" && !signupRequiredTermsAccepted(signupForm)) return;
+      setSignupStep(signupForm, targetStep);
+    });
+  });
+  $("[data-signup-agree-all]", signupForm)?.addEventListener("change", (event) => {
+    $$("[data-signup-required-term], [data-signup-optional-term]", signupForm).forEach((input) => {
+      input.checked = event.currentTarget.checked;
+    });
+    updateSignupTermsState(signupForm);
+  });
+  $$("[data-signup-required-term], [data-signup-optional-term]", signupForm).forEach((input) => {
+    input.addEventListener("change", () => updateSignupTermsState(signupForm));
+  });
+  $$("[data-term-toggle]", signupForm).forEach((button) => {
+    button.addEventListener("click", () => {
+      const body = $(`[data-term-body="${button.dataset.termToggle}"]`, signupForm);
+      if (!body) return;
+      const expanded = button.getAttribute("aria-expanded") !== "false";
+      button.setAttribute("aria-expanded", expanded ? "false" : "true");
+      button.textContent = expanded ? "⌄" : "⌃";
+      body.hidden = expanded;
+    });
+  });
+  $("[data-signup-home]", signupForm)?.addEventListener("click", () => {
+    location.href = "/";
+  });
   $$("input[name='phoneMid'], input[name='phoneLast']", signupForm).forEach((input) => {
     input.addEventListener("input", () => {
       input.value = input.value.replace(/\D/g, "").slice(0, 4);
@@ -1369,6 +1446,11 @@ if (signupForm) {
 }
 
 document.addEventListener("click", (event) => {
+  const signupCta = event.target.closest(".signup-cta");
+  if (signupCta) {
+    location.href = "/signup";
+    return;
+  }
   if (event.target.closest("[data-trade-fraud-check]")) {
     openTradeFraudModal();
     return;
@@ -1391,7 +1473,12 @@ $$("form[data-form]").forEach((form) => {
         await post("/api/login", data);
         location.href = "/";
       } else if (type === "signup") {
-        if (form.dataset.fraudChecked !== "true" || form.dataset.fraudPhone !== signupPhoneValue(form)) {
+        if (!signupRequiredTermsAccepted(form)) {
+          setSignupStep(form, 2);
+          message.textContent = "필수 약관에 동의해주세요.";
+          return;
+        }
+        if (!signupFraudVerified(form)) {
           message.textContent = "사기번호조회를 먼저 완료해주세요.";
           return;
         }
@@ -1406,7 +1493,8 @@ $$("form[data-form]").forEach((form) => {
           return;
         }
         await post("/api/signup", data);
-        location.href = "/";
+        message.textContent = "";
+        setSignupStep(form, 4);
       } else if (type === "sell" || type === "buy") {
         await post("/api/trade", { ...data, type });
         const doneMessage = type === "sell" ? "판매글이 등록되었습니다." : "구매글이 등록되었습니다.";

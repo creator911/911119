@@ -2253,7 +2253,7 @@ function header(user) {
         <button class="search-icon" type="submit" aria-label="검색"><img src="/assets/header/search-icon.png" alt=""></button>
       </form>
       <nav class="account">
-        ${user ? `<b>${user.nickname}</b><span>${user.displayGrade}</span><a href="/mypage">마이페이지</a><button data-action="logout">로그아웃</button>` : `<a class="account-image-link" href="/login" aria-label="로그인"><img src="/assets/header/login2.png" alt="로그인"></a><a class="account-image-link" href="/signup" aria-label="회원가입"><img src="/assets/header/signup2.png" alt="회원가입"></a>`}
+        ${user ? `<b>${user.nickname}</b><span>${user.displayGrade}</span><a href="/mypage">마이페이지</a><button data-action="logout">로그아웃</button>` : `<a class="account-image-link" href="/login" aria-label="로그인"><img src="/assets/header/login2.png" alt="로그인"></a><a class="account-image-link" href="/signup" aria-label="회원가입"><img src="/assets/header/signup-button-170x63.png" alt="회원가입"></a>`}
         ${canAdmin(user) ? `<a href="/admin">관리자</a>` : ""}
         ${canStaff(user) ? `<a href="/staff">상담사</a>` : ""}
       </nav>
@@ -2334,7 +2334,7 @@ function homePage(user, db) {
           <label>비밀번호<input name="password" type="password" placeholder="비밀번호를 입력하세요" required></label>
           <div class="login-row"><label class="auto-login"><input type="checkbox" name="autoLogin"> 자동로그인</label><a href="/">아이디/비밀번호 찾기</a></div>
           <button>로그인</button>
-          <p>아직 계정이 없으신가요? <a href="/signup">회원가입</a></p>
+          <p class="home-signup-cta signup-cta">아직 계정이 없으신가요? <a href="/signup">회원가입</a></p>
           <span class="form-message"></span>
         </form>`;
   return layout("홈", user, `<main>
@@ -2379,61 +2379,136 @@ function authPage(user, mode) {
   const isSignup = mode === "signup";
   const signupFields = `<section class="register-container itemzone-register">
     <div id="register-wrap">
-      <form class="register-form" data-form="signup">
-        <div class="input-wrap">
-          <div class="title">아이디</div>
-          <div class="availability-row">
-            <input name="username" autocomplete="username" required>
-            <span class="availability-status" data-availability="username">입력 대기</span>
+      <div class="signup-intro">
+        <h1>회원가입</h1>
+        <p>아이템존과 함께 안전한 게임 거래를 시작해보세요</p>
+      </div>
+      <form class="register-form signup-flow" data-form="signup" data-signup-current-step="1">
+        <ol class="signup-steps" aria-label="회원가입 진행 단계">
+          <li class="active" data-step-marker="1"><b>1</b><span>회원 유형</span></li>
+          <li data-step-marker="2"><b>2</b><span>약관 동의</span></li>
+          <li data-step-marker="3"><b>3</b><span>정보 입력</span></li>
+          <li data-step-marker="4"><b>4</b><span>가입 완료</span></li>
+        </ol>
+        <section class="signup-panel signup-type-panel" data-signup-panel="1">
+          <article class="signup-member-card">
+            <div class="signup-member-icon" aria-hidden="true"><img src="/assets/signup/member-emblem.png" alt=""></div>
+            <h2>일반 회원</h2>
+            <p>19세 이상 성인 회원으로<br>모든 서비스를 이용할 수 있습니다</p>
+            <button type="button" class="signup-primary-button" data-signup-next="2">회원가입 시작 <span aria-hidden="true">→</span></button>
+          </article>
+          <div class="signup-login-link">이미 계정이 있으신가요? <a href="/login">로그인</a></div>
+        </section>
+        <section class="signup-panel signup-terms-panel" data-signup-panel="2" hidden>
+          <label class="signup-agree-all">
+            <input type="checkbox" data-signup-agree-all>
+            <span>전체 약관에 동의합니다</span>
+          </label>
+          <div class="signup-terms-list">
+            <article class="signup-term-card">
+              <header>
+                <label>
+                  <input type="checkbox" data-signup-required-term data-signup-term="service">
+                  <span><em>필수</em> 이용 약관에 동의합니다</span>
+                </label>
+                <button type="button" data-term-toggle="service" aria-expanded="true">⌃</button>
+              </header>
+              <div class="signup-term-body" data-term-body="service">
+                <p>제 1 장 총칙 [제1조 목적] 이 약관은 아이템존이 제공하는 게임 아이템, 게임머니, 계정 거래 관련 서비스의 이용조건 및 절차에 관한 회사와 회원간의 권리, 의무 및 책임사항을 규정함을 목적으로 합니다.</p>
+                <p>회원은 본 약관 및 아이템존의 운영정책을 준수해야 하며, 타인의 정보를 도용하거나 서비스 질서를 해치는 행위를 할 수 없습니다.</p>
+                <p>아이템존은 안전한 거래 환경을 제공하기 위해 회원의 거래 기록, 접속 정보, 신고 이력 등을 관련 법령과 개인정보처리방침에 따라 관리할 수 있습니다.</p>
+              </div>
+            </article>
+            <article class="signup-term-card">
+              <header>
+                <label>
+                  <input type="checkbox" data-signup-required-term data-signup-term="privacy">
+                  <span><em>필수</em> 개인정보 수집 및 이용에 동의합니다</span>
+                </label>
+                <button type="button" data-term-toggle="privacy" aria-expanded="true">⌃</button>
+              </header>
+              <div class="signup-term-body" data-term-body="privacy">
+                <p>아이템존은 회원가입, 본인 확인, 거래 안전 관리, 고객 상담 및 부정 이용 방지를 위해 아이디, 비밀번호, 이름, 닉네임, 휴대전화번호, 접속 기록을 수집 및 이용합니다.</p>
+                <p>수집된 개인정보는 서비스 제공 및 관련 법령상 보관 의무 이행을 위해 필요한 기간 동안 보관되며, 목적 달성 후 지체 없이 파기됩니다.</p>
+                <p>회원은 개인정보 수집 및 이용에 동의하지 않을 권리가 있으나, 필수 항목 동의를 거부할 경우 회원가입 및 서비스 이용이 제한될 수 있습니다.</p>
+              </div>
+            </article>
+            <label class="signup-term-line">
+              <input type="checkbox" data-signup-required-term data-signup-term="age">
+              <span>만 19세 이상입니다 <em>(필수)</em></span>
+            </label>
+            <label class="signup-term-line muted">
+              <input type="checkbox" data-signup-optional-term data-signup-term="marketing">
+              <span>마케팅 수신 동의 (선택)</span>
+            </label>
           </div>
-          <div class="desc">영문 소문자, 숫자 조합으로 최소 4자 이상 입력해주세요.</div>
-        </div>
-        <div class="input-wrap">
-          <div class="title">패스워드</div>
-          <input name="password" type="password" autocomplete="new-password" required>
-          <div class="desc">8자 이상, 영문 소문자와 숫자를 반드시 포함해주세요.</div>
-        </div>
-        <div class="input-wrap">
-          <div class="title">패스워드 재확인</div>
-          <input name="passwordConfirm" type="password" autocomplete="new-password" required>
-          <div class="desc" data-password-match>패스워드를 한 번 더 입력해주세요.</div>
-        </div>
-        <div class="input-wrap">
-          <div class="title">닉네임</div>
-          <div class="availability-row">
-            <input name="nickname" required>
-            <span class="availability-status" data-availability="nickname">입력 대기</span>
+          <div class="signup-flow-actions">
+            <button type="button" class="signup-secondary-button" data-signup-prev="1">이전</button>
+            <button type="button" class="signup-primary-button" data-signup-next="3" disabled>다음 단계 <span aria-hidden="true">→</span></button>
           </div>
-        </div>
-        <div class="input-wrap">
-          <div class="title">이름</div>
-          <input name="realName" required>
-          <div class="desc">실명이 아닌 경우 출금 처리 시 확인이 지연될 수 있습니다.</div>
-        </div>
-        <div class="input-wrap">
-          <div class="title">핸드폰 번호</div>
-          <div class="phone-wrap">
-            <select name="phoneCarrier" required>
-              <option value="">통신사</option>
-              <option value="SKT">SKT</option>
-              <option value="KT">KT</option>
-              <option value="LGU+">LGU+</option>
-              <option value="SKT 알뜰폰">SKT 알뜰폰</option>
-              <option value="KT 알뜰폰">KT 알뜰폰</option>
-              <option value="LGU+ 알뜰폰">LGU+ 알뜰폰</option>
-            </select>
-            <input name="phonePrefix" value="010" readonly aria-label="휴대폰 앞자리">
-            <input name="phoneMid" inputmode="numeric" maxlength="4" placeholder="0000" required>
-            <input name="phoneLast" inputmode="numeric" maxlength="4" placeholder="0000" required>
+        </section>
+        <section class="signup-panel signup-info-panel" data-signup-panel="3" hidden>
+          <div class="input-wrap">
+            <div class="title">아이디</div>
+            <div class="availability-row">
+              <input name="username" autocomplete="username" required>
+              <span class="availability-status" data-availability="username">입력 대기</span>
+            </div>
+            <div class="desc">영문 소문자, 숫자 조합으로 최소 5자 이상 입력해주세요.</div>
           </div>
-          <button class="fraud-check-button" type="button" data-fraud-check disabled>사기 번호 조회</button>
-          <div class="desc" data-fraud-check-state>핸드폰번호 입력 후 사기번호조회를 진행해주세요.</div>
-        </div>
-        <div class="input-wrap register-actions">
-          <button id="register-btn" type="submit" disabled>회원가입</button>
-          <a class="button" id="go-back" href="/">회원가입 취소</a>
-        </div>
-        <p class="form-message"></p>
+          <div class="input-wrap">
+            <div class="title">패스워드</div>
+            <input name="password" type="password" autocomplete="new-password" required>
+            <div class="desc">8자 이상, 영문 소문자와 숫자를 반드시 포함해주세요.</div>
+          </div>
+          <div class="input-wrap">
+            <div class="title">패스워드 재확인</div>
+            <input name="passwordConfirm" type="password" autocomplete="new-password" required>
+            <div class="desc" data-password-match>패스워드를 한 번 더 입력해주세요.</div>
+          </div>
+          <div class="input-wrap">
+            <div class="title">닉네임</div>
+            <div class="availability-row">
+              <input name="nickname" required>
+              <span class="availability-status" data-availability="nickname">입력 대기</span>
+            </div>
+          </div>
+          <div class="input-wrap">
+            <div class="title">이름</div>
+            <input name="realName" required>
+            <div class="desc">실명이 아닌 경우 출금 처리 시 확인이 지연될 수 있습니다.</div>
+          </div>
+          <div class="input-wrap">
+            <div class="title">핸드폰 번호</div>
+            <div class="phone-wrap">
+              <select name="phoneCarrier" required>
+                <option value="">통신사</option>
+                <option value="SKT">SKT</option>
+                <option value="KT">KT</option>
+                <option value="LGU+">LGU+</option>
+                <option value="SKT 알뜰폰">SKT 알뜰폰</option>
+                <option value="KT 알뜰폰">KT 알뜰폰</option>
+                <option value="LGU+ 알뜰폰">LGU+ 알뜰폰</option>
+              </select>
+              <input name="phonePrefix" value="010" readonly aria-label="휴대폰 앞자리">
+              <input name="phoneMid" inputmode="numeric" maxlength="4" placeholder="0000" required>
+              <input name="phoneLast" inputmode="numeric" maxlength="4" placeholder="0000" required>
+            </div>
+            <button class="fraud-check-button" type="button" data-fraud-check disabled>사기 번호 조회</button>
+            <div class="desc" data-fraud-check-state>핸드폰번호 입력 후 사기번호조회를 진행해주세요.</div>
+          </div>
+          <div class="input-wrap register-actions">
+            <button type="button" class="button" data-signup-prev="2">이전</button>
+            <button id="register-btn" type="submit" disabled>회원가입</button>
+          </div>
+          <p class="form-message"></p>
+        </section>
+        <section class="signup-panel signup-complete-panel" data-signup-panel="4" hidden>
+          <div class="signup-complete-badge" aria-hidden="true">✓</div>
+          <h2>회원가입이 완료되었습니다</h2>
+          <p>아이템존에서 안전한 게임 거래를 시작해보세요.</p>
+          <button type="button" class="signup-primary-button" data-signup-home>아이템존 시작하기</button>
+        </section>
       </form>
       <div class="fraud-check-layer" data-fraud-check-modal hidden>
         <section class="fraud-check-card" role="dialog" aria-modal="true" aria-labelledby="fraudCheckTitle">
@@ -2451,7 +2526,7 @@ function authPage(user, mode) {
       <input name="password" type="password" placeholder="비밀번호" required>
       <div class="auth-links"><a href="/login">아이디/비밀번호 찾기</a></div>
       <button>${isSignup ? "가입하기" : "로그인"}</button>
-      <p class="auth-join">아직 계정이 없으신가요? <a href="/signup">회원가입</a></p>
+      <p class="auth-join signup-cta">아직 계정이 없으신가요? <a href="/signup">회원가입</a></p>
       <p class="form-message"></p>
     </form>`}
   </main>`, "auth");
