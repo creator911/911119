@@ -2342,10 +2342,10 @@ function homePage(user, db) {
     <section class="hero-wrap">
       <div class="hero-banner">
         <div class="hero-banner-track">
-          <img class="hero-banner-image" src="/assets/banners/top-main-banner.png" alt="리니지 클래식 거래수수료 무료">
-          <img class="hero-banner-image" src="/assets/banners/aion-promo.png" alt="아이온 거래수수료 무료">
           <img class="hero-banner-image" src="/assets/banners/maplestory-world-promo.png" alt="메이플스토리 월드">
-          <img class="hero-banner-image" src="/assets/banners/top-main-banner.png" alt="" aria-hidden="true">
+          <img class="hero-banner-image" src="/assets/banners/aion-promo.png" alt="아이온 거래수수료 무료">
+          <img class="hero-banner-image" src="/assets/banners/top-main-banner.png" alt="리니지 클래식 거래수수료 무료">
+          <img class="hero-banner-image" src="/assets/banners/maplestory-world-promo.png" alt="" aria-hidden="true">
         </div>
       </div>
     </section>
