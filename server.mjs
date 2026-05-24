@@ -2181,7 +2181,8 @@ function layout(title, user, content, page = "home") {
   const previewCss = MOBILE_PREVIEW
     ? "\n  <link rel=\"stylesheet\" href=\"/mobile-preview.css?v=mobile-preview-26\">"
     : "\n  <link rel=\"stylesheet\" href=\"/mobile-preview.css?v=mobile-preview-26\" media=\"(max-width: 900px)\">";
-  const appScript = MOBILE_PREVIEW ? "/app.js?v=mobile-preview-3" : "/app.js";
+  const assetVersion = "signup-flow-20260524";
+  const appScript = MOBILE_PREVIEW ? "/app.js?v=mobile-preview-3" : `/app.js?v=${assetVersion}`;
   const appScriptAttrs = MOBILE_PREVIEW ? "" : " defer";
   const mobilePreviewScript = `<script>
   (() => {
@@ -2221,7 +2222,7 @@ function layout(title, user, content, page = "home") {
   <meta name="twitter:image" content="${esc(LINK_PREVIEW_IMAGE_URL)}">
   ${structuredData}
   <link rel="icon" type="image/png" href="/favicon.png">
-  <link rel="stylesheet" href="/styles.css">${previewCss}
+  <link rel="stylesheet" href="/styles.css?v=${assetVersion}">${previewCss}
 </head>
 <body${previewClass} data-page="${page}" data-user="${user ? user.id : ""}" data-role="${user ? user.role : ""}">
   ${mobilePreviewScript}
