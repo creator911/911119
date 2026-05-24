@@ -38,7 +38,7 @@ const PG_COLLECTIONS = [
 ];
 const PUBLIC_SEED_PATH = path.join(DATA_DIR, "public-seed.json");
 const PUBLIC_DIR = path.join(__dirname, "public");
-const SITE_ORIGIN = (process.env.SITE_ORIGIN || "https://www.itemzone.co.kr").replace(/\/+$/, "");
+const SITE_ORIGIN = (process.env.SITE_ORIGIN || "https://itemzone.co.kr").replace(/\/+$/, "");
 const LINK_PREVIEW_TITLE = "\uC544\uC774\uD15C\uC874";
 const LINK_PREVIEW_DESCRIPTION = "\uC548\uC804\uD55C \uAC8C\uC784 \uC544\uC774\uD15C \uAC70\uB798 \uD50C\uB7AB\uD3FC";
 const LINK_PREVIEW_IMAGE_PATH = "/assets/preview/itemzone-link-preview.png";
